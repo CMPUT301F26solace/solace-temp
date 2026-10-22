@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "516030327356",
+    "project_id": "solace-campsites",
+    "storage_bucket": "solace-campsites.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:516030327356:android:b59bd4e2db220433383139",
+        "android_client_info": {
+          "package_name": "com.example.solace_temp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMzgTZ-mAPI3KbTkvxzyNwZcSdgvLIyPQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

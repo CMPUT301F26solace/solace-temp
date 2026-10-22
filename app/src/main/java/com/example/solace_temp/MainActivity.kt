@@ -8,12 +8,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.solace_temp.data.MockAppRepository
+import com.example.solace_temp.data.FirestoreAppRepository
 import com.example.solace_temp.ui.navigation.BottomNavItem
 import com.example.solace_temp.ui.navigation.getBottomNavItemsForRole
 import com.example.solace_temp.ui.screens.*
@@ -31,7 +32,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun SolaceCampsiteApp() {
-    val repository = MockAppRepository
+    val context = LocalContext.current
+    val repository = remember { FirestoreAppRepository(context) }
     val profile by repository.currentProfile.collectAsState()
     val navController = rememberNavController()
     val navItems = getBottomNavItemsForRole(profile.role)
