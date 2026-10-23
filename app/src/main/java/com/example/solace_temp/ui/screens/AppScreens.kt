@@ -34,7 +34,30 @@ import java.io.File
 import java.io.FileOutputStream
 
 // =========================================================================
-// YOUR USER STORY (US 02.02.01): Unique QR Code Generation & Share Helper
+// Someone should split this file into separate files so everyone can work on their part without creating merge conflicts
+//
+//                      ^
+//                     ^ ^
+//                   ^     ^
+//                 ^         ^
+//               ^             ^
+//             ^                 ^
+//           ^                     ^
+//         ^                         ^
+//       ^-----------------------------^
+//                     | |
+//                     | |
+//                     | |
+//                     | |
+//                     | |
+//                     | |
+//                     | |
+//                     | |
+//                     | |
+//                     | |
+//                     | |
+//
+//
 // =========================================================================
 object QrCodeGeneratorUtil {
     fun generateQrBitmap(payload: String, size: Int = 512): Bitmap {
@@ -61,7 +84,7 @@ object QrCodeGeneratorUtil {
 }
 
 // =========================================================================
-// CAMPSITE DETAILS SCREEN (Shared by Entrant & Owner - Includes US 02.02.01)
+// CAMPSITE DETAILS SCREEN (Shared by Entrant & Owner)
 // =========================================================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -263,7 +286,7 @@ fun CampsiteListScreen(
 }
 
 // =========================================================================
-// CREATE CAMPSITE SCREEN (Matches Organizer Mockup #5 - US 02.01.01 & 02.02.01)
+// CREATE CAMPSITE SCREEN
 // =========================================================================
 @Composable
 fun CreateCampsiteScreen(
@@ -319,7 +342,7 @@ fun CreateCampsiteScreen(
 }
 
 // =========================================================================
-// PROFILE & ROLE SWITCHER SCREEN (Matches Mockup #2 + US 01.09.01 + US 03.11.01)
+// PROFILE & ROLE SWITCHER SCREEN
 // =========================================================================
 @Composable
 fun ProfileAndRoleScreen(repository: AppRepository) {
