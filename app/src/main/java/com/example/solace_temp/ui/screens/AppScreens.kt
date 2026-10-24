@@ -1,3 +1,12 @@
+/**
+ * AppScreens.kt
+ * 
+ * Purpose: Contains all the UI screens and their composables used in the application.
+ * 
+ * Needs Change/Issues:
+ * - AppScreens.kt is a monolithic file that desperately needs splitting. Screens like [CampsiteDetailsScreen], [CampsiteListScreen], [CreateCampsiteScreen], and [ProfileAndRoleScreen] should each have their own file.
+ * - Business logic is mixed directly inside Composables; should be extracted into ViewModels.
+ */
 package com.example.solace_temp.ui.screens
 
 import android.content.Context
@@ -59,7 +68,19 @@ import java.io.FileOutputStream
 //
 //
 // =========================================================================
+
+/**
+ * Utility object for generating and sharing QR codes.
+ */
 object QrCodeGeneratorUtil {
+    
+    /**
+     * Generates a QR Code Bitmap from the provided string payload.
+     * 
+     * @param payload The string data to encode into the QR code.
+     * @param size The width and height in pixels for the generated QR code (default 512).
+     * @return A [Bitmap] object representing the QR code.
+     */
     fun generateQrBitmap(payload: String, size: Int = 512): Bitmap {
         val bitMatrix = QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, size, size)
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
@@ -71,6 +92,12 @@ object QrCodeGeneratorUtil {
         return bitmap
     }
 
+    /**
+     * Invokes the system share sheet to share a campsite's deep link / QR payload.
+     * 
+     * @param context The application context used to start the share intent.
+     * @param campsite The [Campsite] object containing the data to share.
+     */
     fun shareQrPayload(context: Context, campsite: Campsite) {
         val sendIntent = Intent(Intent.ACTION_SEND).apply {
             putExtra(
@@ -86,6 +113,14 @@ object QrCodeGeneratorUtil {
 // =========================================================================
 // CAMPSITE DETAILS SCREEN (Shared by Entrant & Owner)
 // =========================================================================
+/**
+ * Composable displaying the details of a specific campsite.
+ * Used by both Entrants (to join waitlists) and Owners (to view/share QR codes).
+ * 
+ * @param campsiteId The ID of the campsite to display.
+ * @param repository The data repository for fetching campsite data.
+ * @param onBack Callback invoked when the user navigates back.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CampsiteDetailsScreen(
@@ -228,6 +263,13 @@ fun CampsiteDetailsScreen(
 // =========================================================================
 // CAMPSITE LIST SCREEN (Used by Entrant Search & Owner My Campsites)
 // =========================================================================
+/**
+ * Composable screen to display a list of campsites, with a search filter.
+ * 
+ * @param title The title text for this screen.
+ * @param repository The data repository for fetching campsite data.
+ * @param onSelectCampsite Callback invoked when a campsite is tapped, receiving the campsite ID.
+ */
 @Composable
 fun CampsiteListScreen(
     title: String,
@@ -288,6 +330,12 @@ fun CampsiteListScreen(
 // =========================================================================
 // CREATE CAMPSITE SCREEN
 // =========================================================================
+/**
+ * Composable screen allowing Owners to create a new campsite.
+ * 
+ * @param repository The data repository for executing the creation logic.
+ * @param onCreated Callback invoked after successful creation, receiving the new campsite's ID.
+ */
 @Composable
 fun CreateCampsiteScreen(
     repository: AppRepository,
@@ -344,6 +392,11 @@ fun CreateCampsiteScreen(
 // =========================================================================
 // PROFILE & ROLE SWITCHER SCREEN
 // =========================================================================
+/**
+ * Composable screen for user profile management and application role switching.
+ * 
+ * @param repository The data repository for updating user profile and role settings.
+ */
 @Composable
 fun ProfileAndRoleScreen(repository: AppRepository) {
     val profile by repository.currentProfile.collectAsState()
@@ -428,6 +481,13 @@ fun ProfileAndRoleScreen(repository: AppRepository) {
 // =========================================================================
 // PLACEHOLDER SCREEN FOR TEAMMATES TO PLUG IN THEIR STORIES
 // =========================================================================
+/**
+ * A generic placeholder screen component used for indicating missing functionality
+ * or screens meant to be implemented by other teammates.
+ * 
+ * @param title The title representing the feature.
+ * @param userStoriesCovered The agile user stories related to this placeholder.
+ */
 @Composable
 fun TeammatePlaceholderScreen(title: String, userStoriesCovered: String) {
     Box(

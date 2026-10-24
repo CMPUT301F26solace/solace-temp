@@ -1,3 +1,11 @@
+/**
+ * Type.kt
+ * 
+ * Purpose: Defines the typography styles for the application's theme.
+ * 
+ * Needs Change/Issues:
+ * - Only `bodyLarge` is defined; we should expand this to include a complete set of type scales.
+ */
 package com.example.solace_temp.ui.theme
 
 import androidx.compose.material3.Typography
@@ -6,7 +14,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// Set of Material typography styles to start with
+/** 
+ * Defines the application's baseline Material 3 typography definitions.
+ * Currently configures the standard body text style.
+ */
 val Typography = Typography(
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,
