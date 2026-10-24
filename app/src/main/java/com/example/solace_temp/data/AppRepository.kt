@@ -1,3 +1,12 @@
+/**
+ * AppRepository.kt
+ * 
+ * Purpose: Defines the core data repository interface for the application, exposing state flows and actions.
+ * It also provides a mocked implementation [MockAppRepository] used for testing or preview purposes.
+ * 
+ * Needs Change/Issues: 
+ * - The file contains both the interface and the mock implementation; these should be separated into their own files.
+ */
 package com.example.solace_temp.data
 
 import com.example.solace_temp.models.*
@@ -7,23 +16,79 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.UUID
 
+/**
+ * Interface defining the primary data access and domain operations for the application.
+ * Provides streams of data via [StateFlow] and methods for data manipulation.
+ */
 interface AppRepository {
+    /** The currently active user's profile. */
     val currentProfile: StateFlow<Profile>
+    
+    /** List of all campsites available in the system. */
     val campsites: StateFlow<List<Campsite>>
+    
+    /** List of all active lotteries for campsites. */
     val lotteries: StateFlow<List<Lottery>>
+    
+    /** List of reservations made across the platform. */
     val reservations: StateFlow<List<Reservation>>
+    
+    /** List of notifications intended for the current user. */
     val notifications: StateFlow<List<AppNotification>>
 
+    /**
+     * Switches the active role of the current user profile.
+     * @param newRole The new [UserRole] to switch to.
+     */
     fun switchRole(newRole: UserRole)
+    
+    /**
+     * Updates the current user's profile information.
+     * @param profile The updated [Profile] data.
+     */
     fun updateProfile(profile: Profile)
+    
+    /**
+     * Creates a new campsite and registers it in the repository.
+     * @param campsite The [Campsite] details to register.
+     * @return The newly created [Campsite] with its generated ID.
+     */
     fun createCampsite(campsite: Campsite): Campsite
+    
+    /**
+     * Adds an entrant to a lottery's waiting list.
+     * @param lotteryId The unique ID of the lottery.
+     * @param entrantId The unique ID of the entrant joining the waitlist.
+     */
     fun joinWaitingList(lotteryId: String, entrantId: String)
+    
+    /**
+     * Removes an entrant from a lottery's waiting list.
+     * @param lotteryId The unique ID of the lottery.
+     * @param entrantId The unique ID of the entrant leaving the waitlist.
+     */
     fun leaveWaitingList(lotteryId: String, entrantId: String)
+    
+    /**
+     * Triggers the winner draw process for a specific lottery.
+     * @param lotteryId The unique ID of the lottery to draw winners for.
+     */
     fun drawLotteryWinners(lotteryId: String)
+    
+    /**
+     * Deletes a campsite from the platform. Requires Admin privileges.
+     * @param campsiteId The unique ID of the campsite to remove.
+     */
     fun removeCampsiteAsAdmin(campsiteId: String)
 }
 
+/**
+ * A mock implementation of [AppRepository] used for testing and UI previews.
+ * Holds in-memory state and dummy data.
+ */
 object MockAppRepository : AppRepository {
+    
+    /** Internal state flow holding the mock profile. */
     private val _currentProfile = MutableStateFlow(
         Profile(
             deviceId = "8F92-A104",
@@ -34,8 +99,11 @@ object MockAppRepository : AppRepository {
             isAdmin = true
         )
     )
+    
+    /** Exposes the mock current profile state. */
     override val currentProfile: StateFlow<Profile> = _currentProfile.asStateFlow()
 
+    /** Internal state flow holding the mock campsites list. */
     private val _campsites = MutableStateFlow(
         listOf(
             Campsite(
@@ -64,8 +132,11 @@ object MockAppRepository : AppRepository {
             )
         )
     )
+    
+    /** Exposes the mock list of campsites. */
     override val campsites: StateFlow<List<Campsite>> = _campsites.asStateFlow()
 
+    /** Internal state flow holding the mock lotteries list. */
     private val _lotteries = MutableStateFlow(
         listOf(
             Lottery(
@@ -78,11 +149,17 @@ object MockAppRepository : AppRepository {
             )
         )
     )
+    
+    /** Exposes the mock lotteries state. */
     override val lotteries: StateFlow<List<Lottery>> = _lotteries.asStateFlow()
 
+    /** Internal state flow holding the mock reservations list. */
     private val _reservations = MutableStateFlow<List<Reservation>>(emptyList())
+    
+    /** Exposes the mock reservations state. */
     override val reservations: StateFlow<List<Reservation>> = _reservations.asStateFlow()
 
+    /** Internal state flow holding the mock notifications list. */
     private val _notifications = MutableStateFlow(
         listOf(
             AppNotification(
@@ -96,16 +173,21 @@ object MockAppRepository : AppRepository {
             )
         )
     )
+    
+    /** Exposes the mock notifications state. */
     override val notifications: StateFlow<List<AppNotification>> = _notifications.asStateFlow()
 
+    /** Switches the user's role in the mock profile state. */
     override fun switchRole(newRole: UserRole) {
         _currentProfile.update { it.copy(role = newRole) }
     }
 
+    /** Updates the mock user profile. */
     override fun updateProfile(profile: Profile) {
         _currentProfile.value = profile
     }
 
+    /** Creates a new mock campsite and appends it to the mock state list. */
     override fun createCampsite(campsite: Campsite): Campsite {
         val newId = if (campsite.id.isBlank()) "camp-${UUID.randomUUID().toString().take(6)}" else campsite.id
         val newSite = campsite.copy(
@@ -116,6 +198,7 @@ object MockAppRepository : AppRepository {
         return newSite
     }
 
+    /** Simulates a user joining the waiting list for a mock lottery. */
     override fun joinWaitingList(lotteryId: String, entrantId: String) {
         _lotteries.update { list ->
             list.map {
@@ -126,6 +209,7 @@ object MockAppRepository : AppRepository {
         }
     }
 
+    /** Simulates a user leaving the waiting list for a mock lottery. */
     override fun leaveWaitingList(lotteryId: String, entrantId: String) {
         _lotteries.update { list ->
             list.map {
@@ -136,6 +220,7 @@ object MockAppRepository : AppRepository {
         }
     }
 
+    /** Simulates drawing winners for a mock lottery. */
     override fun drawLotteryWinners(lotteryId: String) {
         _lotteries.update { list ->
             list.map {
@@ -147,6 +232,7 @@ object MockAppRepository : AppRepository {
         }
     }
 
+    /** Simulates removing a campsite in the mock state. */
     override fun removeCampsiteAsAdmin(campsiteId: String) {
         _campsites.update { list -> list.filterNot { it.id == campsiteId } }
     }
