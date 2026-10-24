@@ -197,10 +197,10 @@ fun SolaceCampsiteApp() {
 
                 // CAMPSITE OWNER ROUTES
                 composable(BottomNavItem.OwnerCampsites.route) {
-                    CampsiteListScreen(
-                        title = "My Registered Campsites",
+                    OwnerCampsitesScreen(
                         repository = repository,
-                        onSelectCampsite = { id -> navController.navigate("campsite_details/$id") }
+                        onSelectCampsite = { id -> navController.navigate("campsite_details/$id") },
+                        onCreateNew = { navController.navigate(BottomNavItem.OwnerCreate.route) }
                     )
                 }
                 composable(BottomNavItem.OwnerCreate.route) {

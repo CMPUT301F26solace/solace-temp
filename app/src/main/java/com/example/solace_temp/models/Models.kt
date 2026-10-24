@@ -68,9 +68,13 @@ data class Profile(
  * @property pricePerNight The cost per night to stay.
  * @property rating The average user rating of the campsite.
  * @property imageUrl Optional URL for a cover image of the campsite.
+ * @property amenities A list of amenities available at the campsite.
+ * @property tags A list of categorical tags describing the campsite.
  * @property rulesAndPolicy The rules and refund policies for the campsite.
  * @property qrCodePayload The deep link payload encoded in the campsite's QR code.
  * @property availableDates A list of string-formatted dates representing availability.
+ * @property bookingStartDateMillis The earliest permissible check-in date in milliseconds.
+ * @property bookingEndDateMillis The latest permissible check-out date in milliseconds.
  */
 data class Campsite(
     val id: String = "",
@@ -82,9 +86,13 @@ data class Campsite(
     val pricePerNight: Double = 45.0,
     val rating: Double = 4.8,
     val imageUrl: String? = null,
+    val amenities: List<String> = emptyList(),
+    val tags: List<String> = emptyList(),
     val rulesAndPolicy: String = "Quiet hours 11 PM - 7 AM. Full refund if forest fire warning.",
     val qrCodePayload: String = "", // Deep link: solace://campsite/{id}
-    val availableDates: List<String> = emptyList() // e.g., ["2027-05-07", "2027-05-08"]
+    val availableDates: List<String> = emptyList(), // e.g., ["2027-05-07", "2027-05-08"]
+    val bookingStartDateMillis: Long? = null,
+    val bookingEndDateMillis: Long? = null
 )
 
 /**
