@@ -300,8 +300,23 @@ fun CampsiteListScreen(
             singleLine = true
         )
         Spacer(Modifier.height(12.dp))
+        if (filtered.isEmpty()) {
+            Text(
+                text = if (searchQuery.isBlank())
+                    "No campsites available."
+                else
+                    "No campsites found.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(filtered) { site ->
+                val ratingLabel = if (site.rating > 0.0) {
+                    "★ ${site.rating}"
+                } else {
+                    "Not yet rated"
+                }
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -317,7 +332,8 @@ fun CampsiteListScreen(
                             Text(site.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text("$${site.pricePerNight.toInt()}/night", color = Color(0xFFE11D48), fontWeight = FontWeight.Bold)
                         }
-                        Text("📍 ${site.location.locationName} · Max ${site.maxOccupancy} guests · ★ ${site.rating}")
+                        Text(
+                            "📍 ${site.location.locationName} · " + "Max ${site.maxOccupancy} guests · $ratingLabel")
                         Spacer(Modifier.height(4.dp))
                         Text("Tap to view details & QR code →", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
                     }
