@@ -1,5 +1,5 @@
 # solace-temp
-Welcome to solace-temp, a campsite reservation management app! 
+This is a campsite reservation management app created using kotlin in android studio that allows users, owners and administrators to access, list and manage campsites. 
 
 ## Team Members:
 * Samuel Gillies - sbgillie-png
