@@ -1,13 +1,3 @@
-/**
- * BottomNavItem.kt
- * 
- * Purpose: Defines the navigation items used in the app's bottom navigation bar,
- * segmented by user roles (Entrant, Owner, Admin).
- * 
- * Needs Change/Issues:
- * - Currently relies on string-based routing, consider migrating to type-safe Compose Navigation.
- * - This file is located in a typoed 'navagation' package folder and should be moved to 'navigation'.
- */
 package com.example.solace_temp.ui.navigation
 
 import androidx.compose.material.icons.Icons
@@ -15,13 +5,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.solace_temp.models.UserRole
 
-/**
- * Represents an item in the bottom navigation bar.
- * 
- * @property route The navigation route associated with the item.
- * @property label The display text for the navigation tab.
- * @property icon The vector icon to display on the tab.
- */
 sealed class BottomNavItem(val route: String, val label: String, val icon: ImageVector) {
     // Entrant Tabs (Matches Mockup 1)
     

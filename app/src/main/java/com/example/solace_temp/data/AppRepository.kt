@@ -115,6 +115,8 @@ object MockAppRepository : AppRepository {
                 maxOccupancy = 6,
                 pricePerNight = 55.0,
                 rating = 4.9,
+                amenities = listOf("Fire pit", "Picnic table", "Potable water", "Flush toilets"),
+                tags = listOf("Mountain View", "Rock Climbing", "Pet Friendly"),
                 qrCodePayload = "solace://campsite/camp-banff-01",
                 availableDates = listOf("2027-05-07", "2027-05-08", "2027-05-14", "2027-05-15")
             ),
@@ -127,6 +129,8 @@ object MockAppRepository : AppRepository {
                 maxOccupancy = 8,
                 pricePerNight = 65.0,
                 rating = 4.7,
+                amenities = listOf("Outdoor cookhouse", "Tennis court", "Showers", "Power hookups"),
+                tags = listOf("Family Friendly", "RV Accessible"),
                 qrCodePayload = "solace://campsite/camp-hinton-02",
                 availableDates = listOf("2027-05-21", "2027-05-22", "2027-05-28", "2027-05-29")
             )
