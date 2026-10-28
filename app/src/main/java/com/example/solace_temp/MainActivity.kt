@@ -50,6 +50,7 @@ import com.example.solace_temp.ui.navigation.getBottomNavItemsForRole
 import com.example.solace_temp.ui.screens.*
 import com.example.solace_temp.ui.theme.Solace_tempTheme
 import kotlinx.coroutines.delay
+import com.example.solace_temp.ui.screens.EntrantNotificationsScreen
 
 /**
  * Main entry point of the Solace application.
@@ -191,8 +192,17 @@ fun SolaceCampsiteApp() {
                 composable(BottomNavItem.EntrantQrScan.route) {
                     TeammatePlaceholderScreen("Scan Promotional QR Code", "US 01.12.01")
                 }
+
+                // Lottery Notifications & Invitations
                 composable(BottomNavItem.EntrantNotifications.route) {
-                    TeammatePlaceholderScreen("Lottery Notifications & Invitations", "US 01.03.01, US 01.04.01")
+                    EntrantNotificationsScreen(
+                        repository = repository,
+                        onAcceptReservation = { campsiteId, _ ->
+                            navController.navigate("campsite_details/$campsiteId")
+                        },
+                        onDeclineReservation = { _ -> // will connect decline logic to repository
+                        }
+                    )
                 }
 
                 // CAMPSITE OWNER ROUTES
