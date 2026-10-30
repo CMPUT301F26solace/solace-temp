@@ -36,6 +36,7 @@ class CampsiteDetailsScreenTest {
         override fun switchRole(newRole: UserRole) {}
         override fun updateProfile(profile: Profile) {}
         override fun createCampsite(campsite: Campsite): Campsite = campsite
+        override fun createLottery(lottery: Lottery): Lottery = lottery
         override fun joinWaitingList(lotteryId: String, entrantId: String) {}
         override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
         override fun drawLotteryWinners(lotteryId: String) {}
