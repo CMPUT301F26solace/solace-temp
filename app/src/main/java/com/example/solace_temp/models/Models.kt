@@ -99,8 +99,11 @@ data class Campsite(
  * Represents a lottery system for one or more campsites.
  * 
  * @property id The unique identifier for the lottery.
+ * @property name The name of the lottery.
  * @property campsiteIds The list of campsite IDs associated with this lottery.
  * @property ownerId The device ID of the owner running the lottery.
+ * @property registrationStartMillis The start timestamp for waitlist registration in milliseconds.
+ * @property registrationEndMillis The end timestamp for waitlist registration in milliseconds.
  * @property registrationStart The start date for waitlist registration.
  * @property registrationEnd The end date for waitlist registration.
  * @property bookingStart The start date for allowed bookings.
@@ -113,10 +116,15 @@ data class Campsite(
  */
 data class Lottery(
     val id: String = "",
+    val name: String = "Default Lottery",
     val campsiteIds: List<String> = emptyList(), // Supports single or multiple campsites (US 02.04.02)
     val ownerId: String = "",
+    val registrationStartMillis: Long? = null,
+    val registrationEndMillis: Long? = null,
     val registrationStart: String = "2026-10-01",
     val registrationEnd: String = "2026-10-19",
+    val bookingStartMillis: Long? = null,
+    val bookingEndMillis: Long? = null,
     val bookingStart: String = "2027-05-01",
     val bookingEnd: String = "2027-05-31",
     val maxWinners: Int = 5,

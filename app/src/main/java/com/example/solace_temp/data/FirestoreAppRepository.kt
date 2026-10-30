@@ -161,7 +161,7 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         db.collection("profiles").document(deviceId).set(profile)
     }
 
-    /** Creates a new campsite in Firestore and initializes a default lottery for it. */
+    /** Creates a new campsite in Firestore. */
     override fun createCampsite(campsite: Campsite): Campsite {
         val newId = if (campsite.id.isBlank()) "camp-${UUID.randomUUID().toString().take(6)}" else campsite.id
         val newSite = campsite.copy(
@@ -170,18 +170,15 @@ class FirestoreAppRepository(context: Context) : AppRepository {
             qrCodePayload = "solace://campsite/$newId"
         )
         db.collection("campsites").document(newId).set(newSite)
-
-        // Also create a default active lottery for this campsite so Entrants can join right away
-        val defaultLottery = Lottery(
-            id = "lot-$newId",
-            campsiteIds = listOf(newId),
-            ownerId = deviceId,
-            maxWinners = 5,
-            waitlistCapacity = 100
-        )
-        db.collection("lotteries").document(defaultLottery.id).set(defaultLottery)
-
         return newSite
+    }
+
+    /** Creates a new lottery in Firestore. */
+    override fun createLottery(lottery: Lottery): Lottery {
+        val newId = if (lottery.id.isBlank()) "lot-${UUID.randomUUID().toString().take(6)}" else lottery.id
+        val newLottery = lottery.copy(id = newId, ownerId = deviceId)
+        db.collection("lotteries").document(newId).set(newLottery)
+        return newLottery
     }
 
     /** Adds the given entrant to the waiting list of a specific lottery in Firestore. */
