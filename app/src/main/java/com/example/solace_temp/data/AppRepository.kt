@@ -54,6 +54,13 @@ interface AppRepository {
      * @return The newly created [Campsite] with its generated ID.
      */
     fun createCampsite(campsite: Campsite): Campsite
+
+    /**
+     * Creates a new lottery for one or more campsites.
+     * @param lottery The [Lottery] configuration to create.
+     * @return The newly created [Lottery].
+     */
+    fun createLottery(lottery: Lottery): Lottery
     
     /**
      * Adds an entrant to a lottery's waiting list.
@@ -200,6 +207,14 @@ object MockAppRepository : AppRepository {
         )
         _campsites.update { it + newSite }
         return newSite
+    }
+
+    /** Creates a new mock lottery and appends it to the mock state list. */
+    override fun createLottery(lottery: Lottery): Lottery {
+        val newId = if (lottery.id.isBlank()) "lot-${UUID.randomUUID().toString().take(6)}" else lottery.id
+        val newLottery = lottery.copy(id = newId)
+        _lotteries.update { it + newLottery }
+        return newLottery
     }
 
     /** Simulates a user joining the waiting list for a mock lottery. */
