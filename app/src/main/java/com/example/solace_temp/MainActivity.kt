@@ -240,14 +240,26 @@ fun SolaceCampsiteApp() {
 
                 // ADMIN ROUTES
                 composable(BottomNavItem.AdminCampsites.route) {
-                    CampsiteListScreen(
-                        title = "Admin: Moderate Campsites",
+                    AdminCampsitesScreen(
                         repository = repository,
                         onSelectCampsite = { id -> navController.navigate("campsite_details/$id") }
                     )
                 }
                 composable(BottomNavItem.AdminProfiles.route) {
-                    TeammatePlaceholderScreen("Admin: Browse & Remove Profiles", "US 03.02.01, US 03.05.01")
+                    AdminProfilesScreen(
+                        repository = repository,
+                        onSelectProfile = { deviceId ->
+                            // In the future, this will navigate to the detailed profile moderation view
+                            navController.navigate("profile_details/$deviceId")
+                        }
+                    )
+                }
+                composable("profile_details/{deviceId}") { backStackEntry ->
+                    val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
+                    TeammatePlaceholderScreen(
+                        title = "Profile Moderation (ID: $deviceId)",
+                        userStoriesCovered = "US 03.02.01, US 03.05.01"
+                    )
                 }
                 composable(BottomNavItem.AdminLogs.route) {
                     TeammatePlaceholderScreen("Admin: Notification & Message Logs", "US 03.08.01, US 03.12.01")

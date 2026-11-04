@@ -16,6 +16,7 @@ import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1138,22 +1139,26 @@ fun ProfileAndRoleScreen(repository: AppRepository) {
     ) {
         Text("Your Profile", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
-        // Role Switcher Card (For Demoing Entrant / Owner / Admin seamlessly)
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(Modifier.padding(16.dp)) {
-                Text("Active Role Mode (US 03.11.01)", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    UserRole.entries.forEach { roleOption ->
-                        FilterChip(
-                            selected = profile.role == roleOption,
-                            onClick = { repository.switchRole(roleOption) },
-                            label = { Text(roleOption.name) }
-                        )
+        // Acceptance Criteria: Admin can navigate between views within the same profile[cite: 15]
+        if (profile.isAdmin) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Admin View Navigation", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Switch your active view to access Entrant or Owner features.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        UserRole.entries.forEach { roleOption ->
+                            FilterChip(
+                                selected = profile.role == roleOption,
+                                onClick = { repository.switchRole(roleOption) },
+                                label = { Text(roleOption.name) }
+                            )
+                        }
                     }
                 }
             }
@@ -1191,7 +1196,7 @@ fun ProfileAndRoleScreen(repository: AppRepository) {
                 }
 
                 Text(
-                    text = "📱 Device ID (US 01.09.01): ${profile.deviceId}",
+                    text = "📱 Device ID: ${profile.deviceId}",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -1853,6 +1858,375 @@ fun TeammatePlaceholderScreen(title: String, userStoriesCovered: String) {
                 Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text("Teammate Story Slot: $userStoriesCovered", color = Color.Gray)
+            }
+        }
+    }
+}
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AdminCampsitesScreen(
+    repository: AppRepository,
+    onSelectCampsite: (String) -> Unit
+) {
+    val campsites by repository.campsites.collectAsState()
+    val profile by repository.currentProfile.collectAsState()
+    val lotteries by repository.lotteries.collectAsState()
+
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedStatusFilter by remember { mutableStateOf<CampsiteStatus?>(null) }
+    var requireActiveLottery by remember { mutableStateOf(false) }
+    var sortDescending by remember { mutableStateOf(true) }
+
+    // NEW: State for Date Created Filter
+    var showDateFilterDialog by remember { mutableStateOf(false) }
+    var dateFilterStart by remember { mutableStateOf<Long?>(null) }
+    var dateFilterEnd by remember { mutableStateOf<Long?>(null) }
+
+    if (profile.role != UserRole.ADMIN) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Access Denied: Administrator credentials required.", color = MaterialTheme.colorScheme.error)
+        }
+        return
+    }
+
+    // UPDATED: Filter logic now checks the dateCreatedMillis
+    val filteredAndSorted = campsites.filter { site ->
+        val matchesSearch = site.name.contains(searchQuery, ignoreCase = true) ||
+                site.location.locationName.contains(searchQuery, ignoreCase = true) ||
+                site.ownerId.contains(searchQuery, ignoreCase = true)
+        val matchesStatus = selectedStatusFilter == null || site.status == selectedStatusFilter
+        val matchesLottery = !requireActiveLottery || lotteries.any { it.campsiteIds.contains(site.id) }
+
+        // Check if the campsite's creation date falls within the selected filter range
+        val matchesDate = if (dateFilterStart != null && dateFilterEnd != null) {
+            site.dateCreatedMillis in dateFilterStart!!..dateFilterEnd!!
+        } else true
+
+        matchesSearch && matchesStatus && matchesLottery && matchesDate
+    }.let { list ->
+        if (sortDescending) list.sortedByDescending { it.dateCreatedMillis }
+        else list.sortedBy { it.dateCreatedMillis }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().background(Color(0xFFEDE8F8)).padding(16.dp)
+    ) {
+        Text("Admin: Campsite Registry", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Search by name, location, or owner ID...") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = selectedStatusFilter == null && !requireActiveLottery && dateFilterStart == null,
+                    onClick = {
+                        selectedStatusFilter = null
+                        requireActiveLottery = false
+                        dateFilterStart = null
+                        dateFilterEnd = null
+                    },
+                    label = { Text("All") }
+                )
+
+                // NEW: Date Created Filter Chip
+                FilterChip(
+                    selected = dateFilterStart != null,
+                    onClick = { showDateFilterDialog = true },
+                    label = { Text(if (dateFilterStart != null) "Date Filtered" else "Filter Date") }
+                )
+
+                FilterChip(
+                    selected = requireActiveLottery,
+                    onClick = { requireActiveLottery = !requireActiveLottery },
+                    label = { Text("Has Lottery") }
+                )
+                CampsiteStatus.entries.forEach { status ->
+                    FilterChip(
+                        selected = selectedStatusFilter == status,
+                        onClick = { selectedStatusFilter = status },
+                        label = { Text(status.name) }
+                    )
+                }
+            }
+
+            IconButton(onClick = { sortDescending = !sortDescending }) {
+                Icon(
+                    imageVector = Icons.Default.DateRange,
+                    contentDescription = "Sort by Date",
+                    tint = if (sortDescending) MaterialTheme.colorScheme.primary else Color.Gray
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        if (filteredAndSorted.isEmpty()) {
+            Text(
+                text = if (searchQuery.isBlank() && selectedStatusFilter == null && !requireActiveLottery && dateFilterStart == null)
+                    "No campsites registered in the platform."
+                else
+                    "No campsites match search/filter criteria.",
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(filteredAndSorted) { site ->
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().clickable { onSelectCampsite(site.id) }
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(site.name, fontWeight = FontWeight.Bold)
+
+                            val statusColor = when(site.status) {
+                                CampsiteStatus.ACTIVE -> Color(0xFF2E7D32)
+                                CampsiteStatus.DRAFT -> Color(0xFF757575)
+                                CampsiteStatus.FLAGGED -> Color(0xFFD32F2F)
+                            }
+                            Text(site.status.name, color = statusColor, fontWeight = FontWeight.Bold)
+                        }
+                        Text("Owner ID: ${site.ownerId}")
+                        Text("📍 ${site.location.locationName} · Capacity: ${site.maxOccupancy}")
+                        Spacer(Modifier.height(4.dp))
+                        Text("Tap to manage/moderate →", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+    }
+
+    // NEW: Dialog popup for selecting the date range
+    if (showDateFilterDialog) {
+        val dateState = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = dateFilterStart,
+            initialSelectedEndDateMillis = dateFilterEnd
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDateFilterDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    dateFilterStart = dateState.selectedStartDateMillis
+                    // Add roughly 24 hours to the end date so it includes the full closing day
+                    dateFilterEnd = dateState.selectedEndDateMillis?.plus(86399999)
+                    showDateFilterDialog = false
+                }) { Text("Apply") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    dateFilterStart = null
+                    dateFilterEnd = null
+                    showDateFilterDialog = false
+                }) { Text("Clear") }
+            }
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                DateRangePicker(state = dateState, modifier = Modifier.fillMaxWidth().height(450.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AdminProfilesScreen(
+    repository: AppRepository,
+    onSelectProfile: (String) -> Unit
+) {
+    // Note: Ensure your AppRepository exposes 'profiles' similar to 'campsites'
+    val profilesList by repository.profiles.collectAsState(initial = emptyList())
+    val currentProfile by repository.currentProfile.collectAsState()
+
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedRoleFilter by remember { mutableStateOf<UserRole?>(null) }
+    var selectedStatusFilter by remember { mutableStateOf<AccountStatus?>(null) }
+    var sortDescending by remember { mutableStateOf(true) }
+
+    var showDateFilterDialog by remember { mutableStateOf(false) }
+    var dateFilterStart by remember { mutableStateOf<Long?>(null) }
+    var dateFilterEnd by remember { mutableStateOf<Long?>(null) }
+
+    // Acceptance Criteria: Only users with verified administrator credentials can access[cite: 12]
+    if (currentProfile.role != UserRole.ADMIN) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Access Denied: Administrator credentials required.", color = MaterialTheme.colorScheme.error)
+        }
+        return
+    }
+
+    // Apply Search, Filter, and Sort criteria[cite: 12]
+    val filteredAndSorted = profilesList.filter { user ->
+        val matchesSearch = user.name.contains(searchQuery, ignoreCase = true) ||
+                user.email.contains(searchQuery, ignoreCase = true) ||
+                user.deviceId.contains(searchQuery, ignoreCase = true)
+
+        val matchesRole = selectedRoleFilter == null || user.role == selectedRoleFilter
+        val matchesStatus = selectedStatusFilter == null || user.accountStatus == selectedStatusFilter
+
+        val matchesDate = if (dateFilterStart != null && dateFilterEnd != null) {
+            user.registrationDateMillis in dateFilterStart!!..dateFilterEnd!!
+        } else true
+
+        matchesSearch && matchesRole && matchesStatus && matchesDate
+    }.let { list ->
+        if (sortDescending) list.sortedByDescending { it.registrationDateMillis }
+        else list.sortedBy { it.registrationDateMillis }
+    }
+
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFEDE8F8)).padding(16.dp)) {
+        Text("Admin: User Directory", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+
+        // Search by name, email, or user identifier[cite: 12]
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Search by name, email, or ID...") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        // Filter options for role, status, and creation date[cite: 12]
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = selectedRoleFilter == null && selectedStatusFilter == null && dateFilterStart == null,
+                    onClick = {
+                        selectedRoleFilter = null
+                        selectedStatusFilter = null
+                        dateFilterStart = null
+                        dateFilterEnd = null
+                    },
+                    label = { Text("All") }
+                )
+
+                FilterChip(
+                    selected = dateFilterStart != null,
+                    onClick = { showDateFilterDialog = true },
+                    label = { Text(if (dateFilterStart != null) "Date Filtered" else "Filter Date") }
+                )
+
+                UserRole.entries.forEach { role ->
+                    FilterChip(
+                        selected = selectedRoleFilter == role,
+                        onClick = { selectedRoleFilter = role },
+                        label = { Text(role.name) }
+                    )
+                }
+
+                AccountStatus.entries.forEach { status ->
+                    FilterChip(
+                        selected = selectedStatusFilter == status,
+                        onClick = { selectedStatusFilter = status },
+                        label = { Text(status.name) }
+                    )
+                }
+            }
+
+            IconButton(onClick = { sortDescending = !sortDescending }) {
+                Icon(
+                    imageVector = Icons.Default.DateRange,
+                    contentDescription = "Sort by Registration Date",
+                    tint = if (sortDescending) MaterialTheme.colorScheme.primary else Color.Gray
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // Empty state feedback[cite: 12]
+        if (filteredAndSorted.isEmpty()) {
+            Text(
+                text = if (searchQuery.isBlank() && selectedRoleFilter == null && selectedStatusFilter == null && dateFilterStart == null)
+                    "No profiles registered in the platform."
+                else
+                    "No profiles match search/filter criteria.",
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+
+        // Virtual scrolling for large user bases[cite: 12]
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(filteredAndSorted) { user ->
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    // Navigation on click[cite: 12]
+                    modifier = Modifier.fillMaxWidth().clickable { onSelectProfile(user.deviceId) }
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        // Key identity details[cite: 12]
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(user.name.ifBlank { "Unknown User" }, fontWeight = FontWeight.Bold)
+
+                            val statusColor = when(user.accountStatus) {
+                                AccountStatus.ACTIVE -> Color(0xFF2E7D32)
+                                AccountStatus.INACTIVE -> Color(0xFF757575)
+                                AccountStatus.SUSPENDED -> Color(0xFFD32F2F)
+                            }
+                            Text(user.accountStatus.name, color = statusColor, fontWeight = FontWeight.Bold)
+                        }
+                        Text("ID: ${user.deviceId}")
+                        if (user.email.isNotBlank()) Text("Email: ${user.email}")
+                        Text("Role: ${user.role.name} · Registered: ${formatDateMillis(user.registrationDateMillis)}")
+                        Spacer(Modifier.height(4.dp))
+                        Text("Tap for detailed account overview →", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+    }
+
+    // Date Range Picker Dialog for filtering by creation date[cite: 12]
+    if (showDateFilterDialog) {
+        val dateState = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = dateFilterStart,
+            initialSelectedEndDateMillis = dateFilterEnd
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDateFilterDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    dateFilterStart = dateState.selectedStartDateMillis
+                    dateFilterEnd = dateState.selectedEndDateMillis?.plus(86399999) // Add 24h to include the full end day
+                    showDateFilterDialog = false
+                }) { Text("Apply") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    dateFilterStart = null
+                    dateFilterEnd = null
+                    showDateFilterDialog = false
+                }) { Text("Clear") }
+            }
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                DateRangePicker(state = dateState, modifier = Modifier.fillMaxWidth().height(450.dp))
             }
         }
     }
