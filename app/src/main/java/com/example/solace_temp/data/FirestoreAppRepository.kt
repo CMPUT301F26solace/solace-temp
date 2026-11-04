@@ -58,6 +58,12 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     /** Exposes the current profile flow. */
     override val currentProfile: StateFlow<Profile> = _currentProfile.asStateFlow()
 
+    /** Mutable flow containing all user profiles. */
+    private val _profiles = MutableStateFlow<List<Profile>>(emptyList())
+
+    /** Exposes the list of all profiles flow. */
+    override val profiles: StateFlow<List<Profile>> = _profiles.asStateFlow()
+
     /** Mutable flow containing all campsites. */
     private val _campsites = MutableStateFlow<List<Campsite>>(emptyList())
     
@@ -84,6 +90,7 @@ class FirestoreAppRepository(context: Context) : AppRepository {
 
     init {
         listenToCurrentProfile()
+        listenToAllProfiles()
         listenToCampsites()
         listenToLotteries()
         listenToReservations()
@@ -106,6 +113,14 @@ class FirestoreAppRepository(context: Context) : AppRepository {
                 // First time this device opens the app -> create profile document in Firestore
                 docRef.set(_currentProfile.value)
             }
+        }
+    }
+
+    /** Sets up a Firestore listener for all user profiles. */
+    private fun listenToAllProfiles() {
+        db.collection("profiles").addSnapshotListener { snapshot, error ->
+            if (error != null || snapshot == null) return@addSnapshotListener
+            _profiles.value = snapshot.toObjects(Profile::class.java)
         }
     }
 

@@ -23,6 +23,9 @@ import java.util.UUID
 interface AppRepository {
     /** The currently active user's profile. */
     val currentProfile: StateFlow<Profile>
+
+    /** List of all registered profiles in the system. */
+    val profiles: StateFlow<List<Profile>>
     
     /** List of all campsites available in the system. */
     val campsites: StateFlow<List<Campsite>>
@@ -109,6 +112,12 @@ object MockAppRepository : AppRepository {
     
     /** Exposes the mock current profile state. */
     override val currentProfile: StateFlow<Profile> = _currentProfile.asStateFlow()
+
+    /** Internal state flow holding the mock list of all profiles. */
+    private val _profiles = MutableStateFlow(listOf(_currentProfile.value))
+
+    /** Exposes the mock list of profiles. */
+    override val profiles: StateFlow<List<Profile>> = _profiles.asStateFlow()
 
     /** Internal state flow holding the mock campsites list. */
     private val _campsites = MutableStateFlow(
