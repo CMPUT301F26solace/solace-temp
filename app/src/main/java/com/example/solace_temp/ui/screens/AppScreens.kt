@@ -472,8 +472,10 @@ fun CampsiteDetailsScreen(
                             } else if (now > regEnd) {
                                 entrantFeedback = "Error: Registration period has closed."
                             } else {
-                                repository.joinWaitingList(activeLottery.id, profile.deviceId)
-                                entrantFeedback = "Successfully joined waiting list!"
+                                repository.joinWaitingList(activeLottery.id, profile.deviceId) { error ->
+                                    entrantFeedback = error?.let { "Error: $it" }
+                                        ?: "Successfully joined waiting list!"
+                                }
                             }
                         },
                         enabled = isRegistrationOpen && !isInWaitlist,
@@ -481,6 +483,11 @@ fun CampsiteDetailsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(if (isInWaitlist) "Already on Waiting List" else "+ Join Waiting List")
+                    }
+
+                    if (!isInWaitlist && activeLottery.waitlistCapacity != null &&
+                        activeLottery.waitingListEntrantIds.size >= activeLottery.waitlistCapacity) {
+                        Text("Waitlist is full.", color = MaterialTheme.colorScheme.error)
                     }
 
                     OutlinedButton(
@@ -1219,11 +1226,13 @@ fun OwnerLotteriesScreen(
     val lotteries by repository.lotteries.collectAsState()
     val campsites by repository.campsites.collectAsState()
 
-    // Filter lotteries for campsites owned by this user (or all if admin)
+    // Show only lotteries whose campsites actually belong to this owner.
+    val ownedCampsiteIds = campsites.filter { it.ownerId == profile.deviceId }
+        .map { it.id }.toSet()
     val ownedLotteries = lotteries.filter { lottery ->
-        profile.isAdmin ||
-        lottery.ownerId == profile.deviceId ||
-        campsites.any { campsite -> lottery.campsiteIds.contains(campsite.id) && campsite.ownerId == profile.deviceId }
+        lottery.ownerId == profile.deviceId &&
+            lottery.campsiteIds.isNotEmpty() &&
+            lottery.campsiteIds.all { it in ownedCampsiteIds }
     }
 
     Column(
@@ -1409,10 +1418,12 @@ fun LotteryDetailsScreen(
     lotteryId: String,
     repository: AppRepository,
     onBack: () -> Unit,
-    onSelectCampsite: (String) -> Unit
+    onSelectCampsite: (String) -> Unit,
+    onViewWaitlist: (String) -> Unit
 ) {
     val lotteries by repository.lotteries.collectAsState()
     val campsites by repository.campsites.collectAsState()
+    val profile by repository.currentProfile.collectAsState()
     val lottery = lotteries.find { it.id == lotteryId }
 
     Scaffold(
@@ -1520,6 +1531,16 @@ fun LotteryDetailsScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
+                        Text(
+                            "Waitlist capacity: ${lottery.waitlistCapacity?.toString() ?: "Unlimited"}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (lottery.ownerId == profile.deviceId) {
+                            Button(
+                                onClick = { onViewWaitlist(lottery.id) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("View Waitlist") }
+                        }
                         val lotteryStatus = getLotteryStatus(lottery, associatedCampsites.firstOrNull())
                         val statusTextColor = when (lotteryStatus) {
                             "Active" -> Color(0xFF2E7D32)
@@ -1591,6 +1612,7 @@ fun CreateLotteryDialog(
     var lotteryName by remember { mutableStateOf("${campsite.name} Lottery") }
     var selectedCampsiteIds by remember { mutableStateOf(listOf(campsite.id)) }
     var maxWinnersText by remember { mutableStateOf("3") }
+    var waitlistCapacityText by remember { mutableStateOf("") }
     var regStartMillis by remember { mutableStateOf<Long?>(null) }
     var regEndMillis by remember { mutableStateOf<Long?>(null) }
     var bookingStartMillis by remember { mutableStateOf<Long?>(null) }
@@ -1627,6 +1649,14 @@ fun CreateLotteryDialog(
                     value = maxWinnersText,
                     onValueChange = { maxWinnersText = it },
                     label = { Text("Number of Lottery Winners (Required)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = waitlistCapacityText,
+                    onValueChange = { waitlistCapacityText = it },
+                    label = { Text("Waitlist capacity (optional)") },
+                    supportingText = { Text("Leave blank for unlimited entrants") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -1706,6 +1736,8 @@ fun CreateLotteryDialog(
                 onClick = {
                     val hasActive = lotteries.any { it.campsiteIds.contains(campsite.id) && getLotteryStatus(it) != "Finished" }
                     val parsedWinners = maxWinnersText.toIntOrNull()
+                    val parsedCapacity = if (waitlistCapacityText.isBlank()) null
+                        else waitlistCapacityText.toIntOrNull()
 
                     when {
                         hasActive -> {
@@ -1723,6 +1755,11 @@ fun CreateLotteryDialog(
                         parsedWinners > totalMaxGuests -> {
                             feedbackIsError = true
                             feedbackMsg = "Error: Number of winners ($parsedWinners) cannot exceed the total maximum guest capacity ($totalMaxGuests) of the selected campsite(s)."
+                        }
+                        waitlistCapacityText.isNotBlank() &&
+                            (parsedCapacity == null || parsedCapacity < parsedWinners) -> {
+                            feedbackIsError = true
+                            feedbackMsg = "Error: Waitlist capacity must be a whole number at least equal to the winner count ($parsedWinners)."
                         }
                         regStartMillis == null || regEndMillis == null -> {
                             feedbackIsError = true
@@ -1756,6 +1793,7 @@ fun CreateLotteryDialog(
                                     campsiteIds = selectedCampsiteIds,
                                     ownerId = profile.deviceId,
                                     maxWinners = parsedWinners,
+                                    waitlistCapacity = parsedCapacity,
                                     registrationStartMillis = regStartMillis,
                                     registrationEndMillis = regEndMillis,
                                     registrationStart = formatDateMillis(regStartMillis),
