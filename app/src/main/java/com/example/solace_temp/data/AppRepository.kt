@@ -10,6 +10,8 @@
 package com.example.solace_temp.data
 
 import com.example.solace_temp.models.*
+import com.example.solace_temp.validation.WaitingListException
+import com.example.solace_temp.validation.WaitingListRules
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,13 +43,32 @@ interface AppRepository {
      * @param newRole The new [UserRole] to switch to.
      */
     fun switchRole(newRole: UserRole)
-    
+
     /**
      * Updates the current user's profile information.
      * @param profile The updated [Profile] data.
      */
     fun updateProfile(profile: Profile)
-    
+
+    /**
+     * Updates a profile and reports the result.
+     *
+     * Asynchronous repositories override this default implementation.
+     *
+     * @param profile The updated profile.
+     * @param onResult Receives success or failure when saving finishes.
+     */
+    fun updateProfile(
+        profile: Profile,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val result = runCatching {
+            updateProfile(profile)
+        }
+
+        onResult(result)
+    }
+
     /**
      * Creates a new campsite and registers it in the repository.
      * @param campsite The [Campsite] details to register.
@@ -75,6 +96,58 @@ interface AppRepository {
      * @param entrantId The unique ID of the entrant leaving the waitlist.
      */
     fun leaveWaitingList(lotteryId: String, entrantId: String)
+
+    /**
+     * Joins after checking the current lottery and reports completion (US 01.02.01).
+     * Synchronous repositories use this default; Firestore overrides it atomically.
+     *
+     * @param lotteryId The lottery to join.
+     * @param entrantId The existing entrant device ID.
+     * @param onResult Receives success or the reason entry failed.
+     */
+    fun joinWaitingList(
+        lotteryId: String,
+        entrantId: String,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val result = runCatching {
+            val lottery = lotteries.value.find { it.id == lotteryId }
+
+            WaitingListRules.joinError(lottery, entrantId)?.let {
+                throw WaitingListException(it)
+            }
+
+            joinWaitingList(lotteryId, entrantId)
+        }
+
+        onResult(result)
+    }
+
+    /**
+     * Leaves the waiting list and reports completion (US 01.02.02).
+     * Synchronous repositories use this default; asynchronous repositories override it.
+     *
+     * @param lotteryId The lottery to leave.
+     * @param entrantId The existing entrant device ID.
+     * @param onResult Receives success after removal completes, or a failure.
+     */
+    fun leaveWaitingList(
+        lotteryId: String,
+        entrantId: String,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val result = runCatching {
+            val lottery = lotteries.value.find { it.id == lotteryId }
+
+            WaitingListRules.leaveError(lottery, entrantId)?.let {
+                throw WaitingListException(it)
+            }
+
+            leaveWaitingList(lotteryId, entrantId)
+        }
+
+        onResult(result)
+    }
     
     /**
      * Triggers the winner draw process for a specific lottery.
