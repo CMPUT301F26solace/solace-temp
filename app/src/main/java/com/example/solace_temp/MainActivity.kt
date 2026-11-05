@@ -220,7 +220,10 @@ fun SolaceCampsiteApp() {
                     )
                 }
                 composable(BottomNavItem.OwnerEntrants.route) {
-                    TeammatePlaceholderScreen("Entrant Map & Waiting List", "US 02.09.01, Geolocation")
+                    OwnerLotteriesScreen(
+                        repository = repository,
+                        onSelectLottery = { id -> navController.navigate("owner_waitlist/$id") }
+                    )
                 }
                 composable(BottomNavItem.OwnerLottery.route) {
                     OwnerLotteriesScreen(
@@ -234,7 +237,15 @@ fun SolaceCampsiteApp() {
                         lotteryId = lotteryId,
                         repository = repository,
                         onBack = { navController.popBackStack() },
-                        onSelectCampsite = { campsiteId -> navController.navigate("campsite_details/$campsiteId") }
+                        onSelectCampsite = { campsiteId -> navController.navigate("campsite_details/$campsiteId") },
+                        onViewWaitlist = { id -> navController.navigate("owner_waitlist/$id") }
+                    )
+                }
+                composable("owner_waitlist/{lotteryId}") { backStackEntry ->
+                    OwnerWaitlistScreen(
+                        lotteryId = backStackEntry.arguments?.getString("lotteryId") ?: "",
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
                     )
                 }
 
