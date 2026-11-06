@@ -9,16 +9,14 @@ This is a campsite reservation management app created using kotlin in android st
 * Oluwaseun Adegbite - Oluwaseun-30
 * William King - kving1 
 
-## Compatibility
+## Wiki Page
+This [wiki page](https://github.com/CMPUT301F26solace/solace-temp/wiki) contains extra information about our app which includes UI mockups, storyboard sequences, user story planning etc. 
 
 ## Overview
 -
 
 ## Features
 -
-
-## Wiki Page
-This [wiki page](https://github.com/CMPUT301F26solace/solace-temp/wiki) contains extra information about our app which includes UI mockups, storyboard sequences, user story planning etc. 
 
 ## License
 [GPL-3.0 license](https://github.com/CMPUT301F26solace/solace-temp/blob/main/LICENSE)

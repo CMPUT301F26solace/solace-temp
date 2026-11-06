@@ -76,6 +76,9 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     /** Exposes the list of lotteries flow. */
     override val lotteries: StateFlow<List<Lottery>> = _lotteries.asStateFlow()
 
+    private val _lotteryLoadError = MutableStateFlow<String?>(null)
+    override val lotteryLoadError: StateFlow<String?> = _lotteryLoadError.asStateFlow()
+
     /** Mutable flow containing all reservations. */
     private val _reservations = MutableStateFlow<List<Reservation>>(emptyList())
     
@@ -140,7 +143,11 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     /** Sets up a Firestore listener for the lotteries collection. */
     private fun listenToLotteries() {
         db.collection("lotteries").addSnapshotListener { snapshot, error ->
-            if (error != null || snapshot == null) return@addSnapshotListener
+            if (error != null || snapshot == null) {
+                _lotteryLoadError.value = error?.localizedMessage ?: "Could not load lotteries."
+                return@addSnapshotListener
+            }
+            _lotteryLoadError.value = null
             _lotteries.value = snapshot.toObjects(Lottery::class.java)
         }
     }
@@ -197,9 +204,33 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     }
 
     /** Adds the given entrant to the waiting list of a specific lottery in Firestore. */
-    override fun joinWaitingList(lotteryId: String, entrantId: String) {
-        db.collection("lotteries").document(lotteryId)
-            .update("waitingListEntrantIds", FieldValue.arrayUnion(entrantId))
+    override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit) {
+        val document = db.collection("lotteries").document(lotteryId)
+        // Transaction makes checking capacity and joining a single atomic operation.
+        db.runTransaction { tx ->
+            val lottery = tx.get(document).toObject(Lottery::class.java)
+                ?: throw IllegalStateException("Lottery not found.")
+            if (entrantId !in lottery.waitingListEntrantIds) {
+                val cap = lottery.waitlistCapacity
+                if (cap != null && lottery.waitingListEntrantIds.size >= cap) {
+                    throw IllegalStateException("Waitlist is full.")
+                }
+                tx.update(
+                    document,
+                    mapOf(
+                        "waitingListEntrantIds" to (lottery.waitingListEntrantIds + entrantId),
+                        "waitlistJoinedAtMillis" to (lottery.waitlistJoinedAtMillis +
+                            (entrantId to System.currentTimeMillis()))
+                    )
+                )
+            }
+            true
+        }.addOnSuccessListener {
+            onResult(null)
+        }.addOnFailureListener { e ->
+            Log.e("FirestoreRepo", "Joining waitlist failed", e)
+            onResult(e.localizedMessage ?: "Unable to join the waitlist.")
+        }
     }
 
     /** Removes the given entrant from the waiting list of a specific lottery in Firestore. */

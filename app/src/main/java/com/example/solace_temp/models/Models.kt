@@ -146,6 +146,9 @@ data class Lottery(
     val maxWinners: Int = 5,
     val waitlistCapacity: Int? = null, // Optional limit (US 02.04.07)
     val waitingListEntrantIds: List<String> = emptyList(),
+    // Entrant device ID -> time of joining, in epoch milliseconds.
+    // Older lotteries may not have timestamps.
+    val waitlistJoinedAtMillis: Map<String, Long> = emptyMap(),
     val invitedWinnerIds: List<String> = emptyList(),
     val isDrawn: Boolean = false
 )
