@@ -35,6 +35,7 @@ class CampsiteLotteryCreationTest {
     class LotteryFakeRepository : AppRepository {
         val _currentProfile = MutableStateFlow(Profile(deviceId = "owner-lottery", role = UserRole.CAMPSITE_OWNER))
         override val currentProfile: StateFlow<Profile> = _currentProfile
+        override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
         val _campsites = MutableStateFlow(
             listOf(
