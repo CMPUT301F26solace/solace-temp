@@ -13,6 +13,7 @@ import com.example.solace_temp.models.UserRole
 import com.example.solace_temp.ui.screens.AdminProfilesScreen
 import com.example.solace_temp.ui.screens.ProfileAndRoleScreen
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.junit.Rule
 import org.junit.Test
 
@@ -40,6 +41,7 @@ class AdminProfilesScreenTest {
             // Add the empty dummy flows so it compiles
             override val campsites = MutableStateFlow(emptyList<Campsite>())
             override val lotteries = MutableStateFlow(emptyList<Lottery>())
+            override val lotteryLoadError = MutableStateFlow<String?>(null)
             override val reservations = MutableStateFlow(emptyList<Reservation>())
             override val notifications = MutableStateFlow(emptyList<AppNotification>())
 
@@ -47,7 +49,11 @@ class AdminProfilesScreenTest {
             override fun updateProfile(profile: Profile) {}
             override fun createCampsite(campsite: Campsite): Campsite = campsite
             override fun createLottery(lottery: Lottery): Lottery = lottery
-            override fun joinWaitingList(lotteryId: String, entrantId: String) {}
+            override fun joinWaitingList(
+                lotteryId: String,
+                entrantId: String,
+                onResult: (String?) -> Unit
+            ) {}
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
@@ -83,6 +89,7 @@ class AdminProfilesScreenTest {
             override val profiles = MutableStateFlow(listOf(profile1, profile2))
             override val campsites = MutableStateFlow(emptyList<Campsite>())
             override val lotteries = MutableStateFlow(emptyList<Lottery>())
+            override val lotteryLoadError = MutableStateFlow<String?>(null)
             override val reservations = MutableStateFlow(emptyList<Reservation>())
             override val notifications = MutableStateFlow(emptyList<AppNotification>())
 
@@ -90,7 +97,11 @@ class AdminProfilesScreenTest {
             override fun updateProfile(profile: Profile) {}
             override fun createCampsite(campsite: Campsite): Campsite = campsite
             override fun createLottery(lottery: Lottery): Lottery = lottery
-            override fun joinWaitingList(lotteryId: String, entrantId: String) {}
+            override fun joinWaitingList(
+                lotteryId: String,
+                entrantId: String,
+                onResult: (String?) -> Unit
+            ) {}
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
 
@@ -127,6 +138,7 @@ class AdminProfilesScreenTest {
             override val profiles = MutableStateFlow(listOf(adminProfile, ownerProfile))
             override val campsites = MutableStateFlow(emptyList<Campsite>())
             override val lotteries = MutableStateFlow(emptyList<Lottery>())
+            override val lotteryLoadError = MutableStateFlow<String?>(null)
             override val reservations = MutableStateFlow(emptyList<Reservation>())
             override val notifications = MutableStateFlow(emptyList<AppNotification>())
 
@@ -134,7 +146,11 @@ class AdminProfilesScreenTest {
             override fun updateProfile(profile: Profile) {}
             override fun createCampsite(campsite: Campsite): Campsite = campsite
             override fun createLottery(lottery: Lottery): Lottery = lottery
-            override fun joinWaitingList(lotteryId: String, entrantId: String) {}
+            override fun joinWaitingList(
+                lotteryId: String,
+                entrantId: String,
+                onResult: (String?) -> Unit
+            ) {}
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
 
@@ -186,6 +202,7 @@ class ProfileAndRoleScreenTest {
             override val profiles = MutableStateFlow(emptyList<Profile>())
             override val campsites = MutableStateFlow(emptyList<Campsite>())
             override val lotteries = MutableStateFlow(emptyList<Lottery>())
+            override val lotteryLoadError = MutableStateFlow<String?>(null)
             override val reservations = MutableStateFlow(emptyList<Reservation>())
             override val notifications = MutableStateFlow(emptyList<AppNotification>())
 
@@ -193,7 +210,11 @@ class ProfileAndRoleScreenTest {
             override fun updateProfile(profile: Profile) {}
             override fun createCampsite(campsite: Campsite): Campsite = campsite
             override fun createLottery(lottery: Lottery): Lottery = lottery
-            override fun joinWaitingList(lotteryId: String, entrantId: String) {}
+            override fun joinWaitingList(
+                lotteryId: String,
+                entrantId: String,
+                onResult: (String?) -> Unit
+            ) {}
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
 

@@ -21,7 +21,6 @@ class OwnerCampsitesScreenTest {
     class FakeListAppRepository : AppRepository {
         val _currentProfile = MutableStateFlow(Profile())
         override val currentProfile: StateFlow<Profile> = _currentProfile
-        override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
         override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
