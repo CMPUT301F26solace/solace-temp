@@ -3,6 +3,7 @@ package com.example.solace_temp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.*
 import com.example.solace_temp.data.AppRepository
+import com.example.solace_temp.data.WaitingListErrorCallback
 import com.example.solace_temp.data.MockAppRepository
 import com.example.solace_temp.models.AppNotification
 import com.example.solace_temp.models.Campsite
@@ -42,14 +43,16 @@ class AdminProfilesScreenTest {
             override val lotteries = MutableStateFlow(emptyList<Lottery>())
             override val reservations = MutableStateFlow(emptyList<Reservation>())
             override val notifications = MutableStateFlow(emptyList<AppNotification>())
+            override val lotteryLoadError = MutableStateFlow<String?>(null)
 
             override fun switchRole(newRole: UserRole) {}
             override fun updateProfile(profile: Profile) {}
             override fun createCampsite(campsite: Campsite): Campsite = campsite
             override fun createLottery(lottery: Lottery): Lottery = lottery
-            override fun joinWaitingList(lotteryId: String, entrantId: String) {}
+            override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) { onResult.onResult(null) }
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
+            override fun redrawLottery(lotteryId: String) {}
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
         }
 
@@ -85,14 +88,16 @@ class AdminProfilesScreenTest {
             override val lotteries = MutableStateFlow(emptyList<Lottery>())
             override val reservations = MutableStateFlow(emptyList<Reservation>())
             override val notifications = MutableStateFlow(emptyList<AppNotification>())
+            override val lotteryLoadError = MutableStateFlow<String?>(null)
 
             override fun switchRole(newRole: UserRole) {}
             override fun updateProfile(profile: Profile) {}
             override fun createCampsite(campsite: Campsite): Campsite = campsite
             override fun createLottery(lottery: Lottery): Lottery = lottery
-            override fun joinWaitingList(lotteryId: String, entrantId: String) {}
+            override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) { onResult.onResult(null) }
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
+            override fun redrawLottery(lotteryId: String) {}
 
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
             // Add dummy overrides for other required interface members if needed
@@ -129,14 +134,16 @@ class AdminProfilesScreenTest {
             override val lotteries = MutableStateFlow(emptyList<Lottery>())
             override val reservations = MutableStateFlow(emptyList<Reservation>())
             override val notifications = MutableStateFlow(emptyList<AppNotification>())
+            override val lotteryLoadError = MutableStateFlow<String?>(null)
 
             override fun switchRole(newRole: UserRole) {}
             override fun updateProfile(profile: Profile) {}
             override fun createCampsite(campsite: Campsite): Campsite = campsite
             override fun createLottery(lottery: Lottery): Lottery = lottery
-            override fun joinWaitingList(lotteryId: String, entrantId: String) {}
+            override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) { onResult.onResult(null) }
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
+            override fun redrawLottery(lotteryId: String) {}
 
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
             // Add dummy overrides for other required interface members if needed
@@ -147,7 +154,10 @@ class AdminProfilesScreenTest {
         }
 
         // Click the filter chip for Campsite Owners
-        composeTestRule.onNodeWithText("CAMPSITE_OWNER").performClick()
+        composeTestRule.onNodeWithText("CAMPSITE_OWNER")
+            .performScrollTo()
+            .performClick()
+        composeTestRule.waitForIdle()
 
         // Assert the owner is still visible, but the admin is filtered out
         composeTestRule.onNodeWithText("Owner User").assertIsDisplayed()
@@ -188,14 +198,16 @@ class ProfileAndRoleScreenTest {
             override val lotteries = MutableStateFlow(emptyList<Lottery>())
             override val reservations = MutableStateFlow(emptyList<Reservation>())
             override val notifications = MutableStateFlow(emptyList<AppNotification>())
+            override val lotteryLoadError = MutableStateFlow<String?>(null)
 
             override fun switchRole(newRole: UserRole) {}
             override fun updateProfile(profile: Profile) {}
             override fun createCampsite(campsite: Campsite): Campsite = campsite
             override fun createLottery(lottery: Lottery): Lottery = lottery
-            override fun joinWaitingList(lotteryId: String, entrantId: String) {}
+            override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) { onResult.onResult(null) }
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
+            override fun redrawLottery(lotteryId: String) {}
 
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
 
