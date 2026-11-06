@@ -35,4 +35,27 @@ class OwnerWaitlistTest {
         assertTrue("test-entrant" in saved.waitingListEntrantIds)
         assertNotNull(saved.waitlistJoinedAtMillis["test-entrant"])
     }
+
+    @Test
+    fun unlimitedWaitlistAllowsMoreEntrants() {
+        val lottery = MockAppRepository.createLottery(Lottery(maxWinners = 1))
+        val entrants = listOf("entrant-a", "entrant-b", "entrant-c")
+        entrants.forEach { id ->
+            var error: String? = "not submitted"
+            MockAppRepository.joinWaitingList(lottery.id, id) { error = it }
+            assertNull(error)
+        }
+        val saved = MockAppRepository.lotteries.value.first { it.id == lottery.id }
+        assertEquals(3, saved.waitingListEntrantIds.size)
+    }
+
+    @Test
+    fun leavingWaitlistRemovesEntrant() {
+        val lottery = MockAppRepository.createLottery(
+            Lottery(waitingListEntrantIds = listOf("entrant-a", "entrant-b"))
+        )
+        MockAppRepository.leaveWaitingList(lottery.id, "entrant-a")
+        val saved = MockAppRepository.lotteries.value.first { it.id == lottery.id }
+        assertEquals(listOf("entrant-b"), saved.waitingListEntrantIds)
+    }
 }

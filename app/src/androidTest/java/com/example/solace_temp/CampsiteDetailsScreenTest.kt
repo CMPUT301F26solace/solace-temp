@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import androidx.compose.ui.test.performScrollTo
 
 @RunWith(AndroidJUnit4::class)
 class CampsiteDetailsScreenTest {
@@ -102,8 +103,12 @@ class CampsiteDetailsScreenTest {
         composeTestRule.onNodeWithText("No Image Available").assertIsDisplayed()
         
         // Verify owner management options & QR code section
-        composeTestRule.onNodeWithText("Owner Management").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Edit").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Owner Management", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Edit", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
         composeTestRule.onNodeWithText("Lottery").assertIsDisplayed()
         composeTestRule.onNodeWithText("Entrants").assertIsDisplayed()
 
