@@ -53,6 +53,12 @@ class AdminProfilesScreenTest {
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
             override fun redrawLottery(lotteryId: String) {}
+            override suspend fun declineLotteryInvitation(
+                notificationId: String,
+                campsiteId: String
+            ) {
+                // Not needed for these tests.
+            }
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
         }
 
@@ -98,7 +104,12 @@ class AdminProfilesScreenTest {
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
             override fun redrawLottery(lotteryId: String) {}
-
+            override suspend fun declineLotteryInvitation(
+                notificationId: String,
+                campsiteId: String
+            ) {
+                // Not needed for these tests.
+            }
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
             // Add dummy overrides for other required interface members if needed
         }
@@ -144,7 +155,12 @@ class AdminProfilesScreenTest {
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
             override fun redrawLottery(lotteryId: String) {}
-
+            override suspend fun declineLotteryInvitation(
+                notificationId: String,
+                campsiteId: String
+            ) {
+                // Not needed for these tests.
+            }
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
             // Add dummy overrides for other required interface members if needed
         }
@@ -208,7 +224,12 @@ class ProfileAndRoleScreenTest {
             override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
             override fun drawLotteryWinners(lotteryId: String) {}
             override fun redrawLottery(lotteryId: String) {}
-
+            override suspend fun declineLotteryInvitation(
+                notificationId: String,
+                campsiteId: String
+            ) {
+                // Not needed for these tests.
+            }
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
 
         }
