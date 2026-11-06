@@ -102,10 +102,18 @@ class CampsiteDetailsScreenTest {
         composeTestRule.onNodeWithText("No Image Available").assertIsDisplayed()
         
         // Verify owner management options & QR code section
-        composeTestRule.onNodeWithText("Owner Management").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Edit").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Lottery").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Entrants").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Owner Management")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Edit")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Lottery")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Entrants")
+            .performScrollTo()
+            .assertIsDisplayed()
 
         composeTestRule.onNodeWithText("Promotional QR Code")
             .performScrollTo()

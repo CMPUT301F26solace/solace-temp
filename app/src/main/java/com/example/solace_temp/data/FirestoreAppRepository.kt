@@ -35,13 +35,9 @@ class FirestoreAppRepository(context: Context) : AppRepository {
 
     /** 
      * Unique hardware ID for the device. 
-     * Used for identifying users temporarily before authentication is implemented (US 01.09.01). 
+     * Used for identifying users automatically on launch without requiring login (US 01.07.01). 
      */
-    @SuppressLint("HardwareIds")
-    private val deviceId: String = Settings.Secure.getString(
-        context.contentResolver,
-        Settings.Secure.ANDROID_ID
-    ) ?: "emulator-fallback-id"
+    private val deviceId: String = DeviceIdentityManager.getOrCreateDeviceId(context)
 
     /** Mutable flow for the current user's profile state. */
     private val _currentProfile = MutableStateFlow(

@@ -278,7 +278,15 @@ fun SolaceCampsiteApp() {
 
                 // SHARED PROFILE & CAMPSITE DETAILS ROUTES
                 composable(BottomNavItem.ProfileTab.route) {
-                    ProfileAndRoleScreen(repository = repository)
+                    ProfileAndRoleScreen(
+                        repository = repository,
+                        onNavigateToPolicy = { navController.navigate("policy_and_guidelines") }
+                    )
+                }
+                composable("policy_and_guidelines") {
+                    PolicyAndGuidelinesScreen(
+                        onBack = { navController.popBackStack() }
+                    )
                 }
                 composable("campsite_details/{campsiteId}") { backStackEntry ->
                     val campsiteId = backStackEntry.arguments?.getString("campsiteId") ?: ""
