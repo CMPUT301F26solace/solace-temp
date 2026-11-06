@@ -419,6 +419,8 @@ fun CampsiteDetailsScreen(
             // ENTRANT ACTIONS: Join / Leave Waiting List (US 01.01.06, US 01.02.01)
             if (profile.role == UserRole.ENTRANT) {
                 var showBookingDialog by remember { mutableStateOf(false) }
+                var bookingPending by remember { mutableStateOf(false) }
+                var bookingDialogError by remember { mutableStateOf("") }
                 var entrantFeedback by remember { mutableStateOf("") }
                 
                 Spacer(Modifier.height(12.dp))
@@ -445,29 +447,51 @@ fun CampsiteDetailsScreen(
                     DatePickerDialog(
                         onDismissRequest = { showBookingDialog = false },
                         confirmButton = {
-                            TextButton(onClick = {
-                                val selStart = dateState.selectedStartDateMillis
-                                val selEnd = dateState.selectedEndDateMillis
-                                val campStart = campsite.bookingStartDateMillis ?: 0L
-                                val campEnd = campsite.bookingEndDateMillis ?: Long.MAX_VALUE
-                                
-                                if (selStart == null || selEnd == null) {
-                                    entrantFeedback = "Error: Please select both a check-in and check-out date."
-                                } else if (selStart < campStart || selEnd > campEnd) {
-                                    entrantFeedback = "Error: Selected dates are outside the allowed booking period of ${formatDateMillis(campStart)} to ${formatDateMillis(campEnd)}."
-                                } else {
-                                    entrantFeedback = "Success! Dates are within the allowed booking period."
+                            TextButton(
+                                enabled = !bookingPending,
+                                onClick = {
+                                    val selStart = dateState.selectedStartDateMillis
+                                    val selEnd = dateState.selectedEndDateMillis
+                                    val lottery = lotteries.filter {
+                                        campsite.id in it.campsiteIds && profile.deviceId in it.invitedWinnerIds
+                                    }.maxByOrNull { it.bookingStartMillis ?: 0L } ?: activeLottery
+                                    bookingDialogError = ""
+                                    if (selStart == null || selEnd == null || selEnd <= selStart) {
+                                        bookingDialogError = "Select valid check-in and check-out dates."
+                                    } else if (lottery == null) {
+                                        bookingDialogError = "No active lottery is available for this campsite."
+                                    } else {
+                                        bookingPending = true
+                                        repository.confirmBooking(campsite.id, lottery.id, selStart, selEnd) { error ->
+                                            bookingPending = false
+                                            if (error != null) {
+                                                bookingDialogError = error
+                                                entrantFeedback = "Error: $error"
+                                            } else {
+                                                entrantFeedback = "Reservation confirmed! Your dates are now booked."
+                                                showBookingDialog = false
+                                            }
+                                        }
+                                    }
                                 }
-                                showBookingDialog = false
-                            }) {
-                                Text("Confirm Booking")
+                            ) {
+                                Text(if (bookingPending) "Confirming..." else "Confirm Booking")
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showBookingDialog = false }) { Text("Cancel") }
                         }
                     ) {
-                        DateRangePicker(state = dateState, modifier = Modifier.weight(1f))
+                        Column {
+                            if (bookingDialogError.isNotBlank()) {
+                                Text(
+                                    bookingDialogError,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                            DateRangePicker(state = dateState, modifier = Modifier.weight(1f))
+                        }
                     }
                 }
 
@@ -692,7 +716,9 @@ fun CampsiteListScreen(
 fun OwnerCampsitesScreen(
     repository: AppRepository,
     onSelectCampsite: (String) -> Unit,
-    onCreateNew: () -> Unit
+    onCreateNew: () -> Unit,
+    onViewReservations: () -> Unit = {},
+    onViewCalendar: () -> Unit = {}
 ) {
     val profile by repository.currentProfile.collectAsState()
     val campsites by repository.campsites.collectAsState()
@@ -716,7 +742,15 @@ fun OwnerCampsitesScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
         )
-        Spacer(Modifier.height(4.dp))
+        Row(modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onViewReservations, modifier = Modifier.weight(1f)) {
+                Text("Reservations")
+            }
+            OutlinedButton(onClick = onViewCalendar, modifier = Modifier.weight(1f)) {
+                Text("Booked Dates")
+            }
+        }
 
         if (myCampsites.isEmpty()) {
             Box(

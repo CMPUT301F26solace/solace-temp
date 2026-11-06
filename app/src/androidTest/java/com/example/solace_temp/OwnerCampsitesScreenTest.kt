@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import androidx.compose.ui.test.performScrollTo
 
 @RunWith(AndroidJUnit4::class)
 class OwnerCampsitesScreenTest {
@@ -127,10 +128,13 @@ class OwnerCampsitesScreenTest {
         // Verify my campsite is displayed with required summary info
         composeTestRule.onNodeWithText("My Awesome Campsite").assertIsDisplayed()
         composeTestRule.onNodeWithText("📍 My Park").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Max 12 guests").assertIsDisplayed()
-        
+        composeTestRule.onNodeWithText("Max 12 guests", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+
         // Check for thumbnail (content description based on image logic)
-        composeTestRule.onNodeWithContentDescription("Thumbnail").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Campsite Image")
+            .assertIsDisplayed()
 
         // Verify other owner's campsite is excluded
         composeTestRule.onNodeWithText("Someone Else's Campsite").assertDoesNotExist()

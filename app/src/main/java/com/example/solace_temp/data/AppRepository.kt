@@ -22,6 +22,10 @@ import java.util.UUID
  * Interface defining the primary data access and domain operations for the application.
  * Provides streams of data via [StateFlow] and methods for data manipulation.
  */
+fun interface WaitingListErrorCallback {
+    fun onResult(error: String?)
+}
+
 interface AppRepository {
     /** The currently active user's profile. */
     val currentProfile: StateFlow<Profile>
@@ -94,7 +98,7 @@ interface AppRepository {
      * @param lotteryId The unique ID of the lottery.
      * @param entrantId The unique ID of the entrant joining the waitlist.
      */
-    fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit = {})
+    fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback = WaitingListErrorCallback { })
     
     /**
      * Removes an entrant from a lottery's waiting list.
@@ -102,6 +106,17 @@ interface AppRepository {
      * @param entrantId The unique ID of the entrant leaving the waitlist.
      */
     fun leaveWaitingList(lotteryId: String, entrantId: String)
+
+    /** Confirms selected camping nights for an invited lottery winner. Null means success. */
+    fun confirmBooking(
+        campsiteId: String,
+        lotteryId: String,
+        checkInMillis: Long,
+        checkOutMillis: Long,
+        onResult: (String?) -> Unit
+    ) {
+        onResult("Booking is not supported by this repository.")
+    }
 
     /**
      * Joins after checking the current lottery and reports completion (US 01.02.01).
@@ -311,11 +326,12 @@ object MockAppRepository : AppRepository {
     }
 
     /** Simulates a user joining the waiting list for a mock lottery. */
-    override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit) {
+    override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) {
         val lottery = _lotteries.value.find { it.id == lotteryId }
         val error = when {
             lottery == null -> "Lottery not found."
             entrantId in lottery.waitingListEntrantIds -> null
+            !canJoinLottery(lottery) -> "Lottery is not accepting entrants."
             lottery.waitlistCapacity != null &&
                 lottery.waitingListEntrantIds.size >= lottery.waitlistCapacity -> "Waitlist is full."
             else -> null
@@ -331,7 +347,7 @@ object MockAppRepository : AppRepository {
                 }
             }
         }
-        onResult(error)
+        onResult.onResult(error)
     }
 
     /** Simulates a user leaving the waiting list for a mock lottery. */
@@ -343,6 +359,42 @@ object MockAppRepository : AppRepository {
                 } else it
             }
         }
+    }
+
+    /** Stores a confirmed booking in memory for UI tests and previews. */
+    override fun confirmBooking(
+        campsiteId: String,
+        lotteryId: String,
+        checkInMillis: Long,
+        checkOutMillis: Long,
+        onResult: (String?) -> Unit
+    ) {
+        val site = _campsites.value.find { it.id == campsiteId }
+        val lottery = _lotteries.value.find { it.id == lotteryId }
+        val entrantId = _currentProfile.value.deviceId
+        if (site == null || lottery == null) {
+            onResult("Campsite or lottery not found.")
+            return
+        }
+        val dates = bookingNights(checkInMillis, checkOutMillis)
+        val error = bookingValidationError(
+            site, lottery, entrantId, checkInMillis, checkOutMillis, _reservations.value
+        )
+        if (error != null) {
+            onResult(error)
+            return
+        }
+        val booking = Reservation(
+            id = "res-${UUID.randomUUID().toString().take(8)}",
+            campsiteId = site.id,
+            campsiteName = site.name,
+            entrantId = entrantId,
+            ownerId = site.ownerId,
+            bookedDates = dates,
+            status = ReservationStatus.ACTIVE
+        )
+        _reservations.update { it + booking }
+        onResult(null)
     }
 
     /** Simulates drawing winners for a mock lottery. */

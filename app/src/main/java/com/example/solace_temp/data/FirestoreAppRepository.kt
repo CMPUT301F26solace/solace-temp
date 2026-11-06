@@ -228,13 +228,16 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     }
 
     /** Adds the given entrant to the waiting list of a specific lottery in Firestore. */
-    override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit) {
+    override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) {
         val document = db.collection("lotteries").document(lotteryId)
         // Transaction makes checking capacity and joining a single atomic operation.
         db.runTransaction { tx ->
             val lottery = tx.get(document).toObject(Lottery::class.java)
                 ?: throw IllegalStateException("Lottery not found.")
             if (entrantId !in lottery.waitingListEntrantIds) {
+                if (!canJoinLottery(lottery)) {
+                    throw IllegalStateException("Lottery is not accepting entrants.")
+                }
                 val cap = lottery.waitlistCapacity
                 if (cap != null && lottery.waitingListEntrantIds.size >= cap) {
                     throw IllegalStateException("Waitlist is full.")
@@ -250,10 +253,10 @@ class FirestoreAppRepository(context: Context) : AppRepository {
             }
             true
         }.addOnSuccessListener {
-            onResult(null)
+            onResult.onResult(null)
         }.addOnFailureListener { e ->
             Log.e("FirestoreRepo", "Joining waitlist failed", e)
-            onResult(e.localizedMessage ?: "Unable to join the waitlist.")
+            onResult.onResult(e.localizedMessage ?: "Unable to join the waitlist.")
         }
     }
 
@@ -346,6 +349,75 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         }.addOnFailureListener { error ->
             Log.e("FirestoreRepo", "Waiting list update failed", error)
             onResult(Result.failure(error))
+        }
+    }
+
+    /** Saves an invited entrant's reservation and claims its nights atomically. */
+    override fun confirmBooking(
+        campsiteId: String,
+        lotteryId: String,
+        checkInMillis: Long,
+        checkOutMillis: Long,
+        onResult: (String?) -> Unit
+    ) {
+        val nights = bookingNights(checkInMillis, checkOutMillis)
+        if (nights.isEmpty()) {
+            onResult("Choose a valid check-in and check-out date (up to 60 nights).")
+            return
+        }
+
+        val campsiteRef = db.collection("campsites").document(campsiteId)
+        val lotteryRef = db.collection("lotteries").document(lotteryId)
+        val reservationId = "res-${campsiteId}-${lotteryId}-${deviceId}"
+        val reservationRef = db.collection("reservations").document(reservationId)
+        // One document per campsite night prevents two simultaneous bookings of the same night.
+        val slotRefs = nights.map { day ->
+            db.collection("reservationSlots").document("${campsiteId}_$day")
+        }
+
+        db.runTransaction { tx ->
+            // Complete all transaction reads before writing anything.
+            val site = tx.get(campsiteRef).toObject(Campsite::class.java)
+                ?: throw IllegalStateException("Campsite not found.")
+            val lottery = tx.get(lotteryRef).toObject(Lottery::class.java)
+                ?: throw IllegalStateException("Lottery not found.")
+            val existing = tx.get(reservationRef)
+            val occupiedSlots = slotRefs.map { tx.get(it) }
+
+            val error = bookingValidationError(
+                site, lottery, deviceId, checkInMillis, checkOutMillis, _reservations.value
+            )
+            if (error != null) throw IllegalStateException(error)
+            if (existing.exists()) {
+                throw IllegalStateException("You already have a reservation for this campsite and lottery.")
+            }
+            if (occupiedSlots.any { it.exists() }) {
+                throw IllegalStateException("One or more selected dates are already booked.")
+            }
+
+            val reservation = Reservation(
+                id = reservationId,
+                campsiteId = site.id,
+                campsiteName = site.name,
+                entrantId = deviceId,
+                ownerId = site.ownerId,
+                bookedDates = nights,
+                status = ReservationStatus.ACTIVE
+            )
+            tx.set(reservationRef, reservation)
+            slotRefs.forEachIndexed { index, slotRef ->
+                tx.set(slotRef, mapOf(
+                    "reservationId" to reservationId,
+                    "campsiteId" to campsiteId,
+                    "date" to nights[index]
+                ))
+            }
+            true
+        }.addOnSuccessListener {
+            onResult(null)
+        }.addOnFailureListener { error ->
+            Log.e("FirestoreRepo", "Booking confirmation failed", error)
+            onResult(error.localizedMessage ?: "Unable to confirm the reservation.")
         }
     }
 
