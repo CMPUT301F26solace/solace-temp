@@ -11,13 +11,8 @@ package com.example.solace_temp.ui.screens
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
-import com.google.firebase.storage.FirebaseStorage
-import java.util.UUID
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.Image
@@ -70,6 +65,7 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 // =========================================================================
 // Someone should split this file into separate files so everyone can work on their part without creating merge conflicts
@@ -98,6 +94,14 @@ import java.util.Locale
 //
 // =========================================================================
 
+sealed class AppScreen(val route: String) {
+    object EntrantNotifications : AppScreen("entrant_notifications")
+    object EntrantReservations : AppScreen("entrant_reservations")
+    object CampsiteReservation : AppScreen("campsite_reservation/{campsiteId}/{notificationId}") {
+        fun createRoute(campsiteId: String, notificationId: String) = "campsite_reservation/$campsiteId/$notificationId"
+    }
+}
+
 /**
  * Utility object for generating and sharing QR codes.
  */
@@ -111,8 +115,7 @@ object QrCodeGeneratorUtil {
      * @return A [Bitmap] object representing the QR code.
      */
     fun generateQrBitmap(payload: String, size: Int = 512): Bitmap {
-        val validPayload = if (payload.isBlank()) "solace://campsite/placeholder" else payload
-        val bitMatrix = QRCodeWriter().encode(validPayload, BarcodeFormat.QR_CODE, size, size)
+        val bitMatrix = QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, size, size)
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
         for (x in 0 until size) {
             for (y in 0 until size) {
@@ -187,7 +190,6 @@ fun formatDateMillis(millis: Long?): String {
  */
 fun getLotteryStatus(lottery: Lottery?, campsite: Campsite? = null): String {
     if (lottery == null) return "N/A"
-    if (lottery.isDrawn) return "Finished"
     val now = System.currentTimeMillis()
     val regStart = lottery.registrationStartMillis ?: 0L
     val regEnd = lottery.registrationEndMillis ?: Long.MAX_VALUE
@@ -197,7 +199,8 @@ fun getLotteryStatus(lottery: Lottery?, campsite: Campsite? = null): String {
     return when {
         now < regStart -> "Upcoming"
         now in regStart..regEnd -> "Active"
-        now in bookingStart..bookingEnd || now in (regEnd + 1)..bookingEnd -> "Booking"
+        lottery.isDrawn && now > bookingEnd -> "Finished"
+        now in bookingStart..bookingEnd || now in (regEnd + 1)..bookingEnd || lottery.isDrawn -> "Booking"
         now > bookingEnd -> "Finished"
         else -> "N/A"
     }
@@ -224,7 +227,6 @@ fun CampsiteDetailsScreen(
 ) {
     val campsites by repository.campsites.collectAsState()
     val profile by repository.currentProfile.collectAsState()
-    val profiles by repository.profiles.collectAsState()
     val lotteries by repository.lotteries.collectAsState()
     val context = LocalContext.current
 
@@ -244,7 +246,6 @@ fun CampsiteDetailsScreen(
         return
     }
 
-    val ownerProfile = profiles.find { it.deviceId == campsite.ownerId }
     val qrBitmap = remember(campsite.qrCodePayload) {
         QrCodeGeneratorUtil.generateQrBitmap(campsite.qrCodePayload)
     }
@@ -278,7 +279,7 @@ fun CampsiteDetailsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column {
-                    // Promotional Image / Image Placeholder
+                    // Image Placeholder
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -323,7 +324,7 @@ fun CampsiteDetailsScreen(
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "📍 ${campsite.location.locationName.ifBlank { "Location details provided" }}",
+                            "📍 ${campsite.location.locationName}",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -334,10 +335,7 @@ fun CampsiteDetailsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                         )
                         Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Max ${campsite.maxOccupancy} guests · ★ ${if (campsite.rating > 0.0) campsite.rating else "Not yet rated"}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Text("Max ${campsite.maxOccupancy} guests · ★ ${campsite.rating}", style = MaterialTheme.typography.bodyMedium)
                         
                         // Tags
                         if (campsite.tags.isNotEmpty()) {
@@ -362,10 +360,7 @@ fun CampsiteDetailsScreen(
                         Spacer(Modifier.height(16.dp))
                         Text("Description", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(4.dp))
-                        Text(
-                            campsite.description.ifBlank { "No description provided." },
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Text(campsite.description, style = MaterialTheme.typography.bodyMedium)
 
                         // Amenities
                         if (campsite.amenities.isNotEmpty()) {
@@ -375,50 +370,6 @@ fun CampsiteDetailsScreen(
                             campsite.amenities.forEach { amenity ->
                                 Text("• $amenity", style = MaterialTheme.typography.bodyMedium)
                             }
-                        }
-
-                        // Campsite Rules & Cancellation Policy
-                        Spacer(Modifier.height(16.dp))
-                        Text("Rules & Cancellation Policy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            campsite.rulesAndPolicy.ifBlank { "Quiet hours 11 PM - 7 AM. Full refund if forest fire warning." },
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-
-                        // Owner Details
-                        Spacer(Modifier.height(16.dp))
-                        Text("Owner Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(4.dp))
-                        if (ownerProfile != null) {
-                            Text("Name: ${ownerProfile.name.ifBlank { "Campsite Owner" }}", style = MaterialTheme.typography.bodyMedium)
-                            if (ownerProfile.email.isNotBlank()) {
-                                Text("Email: ${ownerProfile.email}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            if (ownerProfile.phone.isNotBlank()) {
-                                Text("Phone: ${ownerProfile.phone}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        } else if (campsite.ownerId.isNotBlank()) {
-                            Text("Owner: Registered Owner (ID: ${campsite.ownerId})", style = MaterialTheme.typography.bodyMedium)
-                        } else {
-                            Text("Owner details: Not specified", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-
-                        // Availability & Schedule
-                        Spacer(Modifier.height(16.dp))
-                        Text("Availability & Schedule", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(4.dp))
-                        if (campsite.availableDates.isNotEmpty()) {
-                            Text("Available Booking Dates:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                            campsite.availableDates.forEach { dateStr ->
-                                Text("• $dateStr", style = MaterialTheme.typography.bodyMedium)
-                            }
-                        } else if (campsite.bookingStartDateMillis != null || campsite.bookingEndDateMillis != null) {
-                            val startStr = formatDateMillis(campsite.bookingStartDateMillis)
-                            val endStr = formatDateMillis(campsite.bookingEndDateMillis)
-                            Text("Allowed Booking Period: $startStr to $endStr", style = MaterialTheme.typography.bodyMedium)
-                        } else {
-                            Text("Flexible availability. Select dates below to request booking.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
 
                         // Active Lottery Listing Status & Entry Window Display
@@ -443,17 +394,10 @@ fun CampsiteDetailsScreen(
                                     Text("Name: ${activeLottery.name}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                     val status = getLotteryStatus(activeLottery, campsite)
                                     Text("Status: $status", style = MaterialTheme.typography.bodySmall, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
-                                    val regEndStr = activeLottery.registrationEnd.ifBlank { formatDateMillis(activeLottery.registrationEndMillis) }
                                     Text(
-                                        "Registration Window: ${activeLottery.registrationStart.ifBlank { formatDateMillis(activeLottery.registrationStartMillis) }} to $regEndStr",
+                                        "Registration Window: ${activeLottery.registrationStart.ifBlank { formatDateMillis(activeLottery.registrationStartMillis) }} to ${activeLottery.registrationEnd.ifBlank { formatDateMillis(activeLottery.registrationEndMillis) }}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        "Registration Deadline: $regEndStr",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
                                     )
                                     Text(
                                         "Booking Window: ${activeLottery.bookingStart.ifBlank { formatDateMillis(activeLottery.bookingStartMillis) }} to ${activeLottery.bookingEnd.ifBlank { formatDateMillis(activeLottery.bookingEndMillis) }}",
@@ -841,6 +785,7 @@ fun OwnerCampsitesScreen(
             myCampsites.forEach { site ->
                 val activeLottery = lotteries.find { it.campsiteIds.contains(site.id) && getLotteryStatus(it, site) != "Finished" && getLotteryStatus(it, site) != "N/A" }
                 val status = getLotteryStatus(activeLottery, site)
+                val ratingLabel = if (site.rating > 0.0) "★ ${site.rating}" else "Not yet rated"
 
                 val (statusBg, statusTextColor, badgeColor) = when (status) {
                     "Active" -> Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), Color(0xFF2E7D32))
@@ -876,7 +821,11 @@ fun OwnerCampsitesScreen(
                                     .background(Color(0xFFE3E8EF), RoundedCornerShape(16.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Image, contentDescription = "Thumbnail", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                                if (site.imageUrl != null) {
+                                    Icon(Icons.Default.Image, contentDescription = "Campsite Image", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                                } else {
+                                    Icon(Icons.Default.Image, contentDescription = "Placeholder Image", tint = Color.Gray, modifier = Modifier.size(36.dp))
+                                }
                             }
 
                             // Campsite info column
@@ -913,7 +862,7 @@ fun OwnerCampsitesScreen(
                                     maxLines = 1
                                 )
                                 Text(
-                                    text = "Max ${site.maxOccupancy} guests",
+                                    text = "Max ${site.maxOccupancy} guests · $ratingLabel",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color.Gray
                                 )
@@ -1039,15 +988,6 @@ fun CreateCampsiteScreen(
     var maxOccupancy by remember { mutableStateOf("") }
     var imageUrlInput by remember { mutableStateOf("") }
 
-    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
-    var isUploading by remember { mutableStateOf(false) }
-
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        selectedImageUri = uri
-    }
-
     var feedbackMsg by remember { mutableStateOf("") }
     var feedbackIsError by remember { mutableStateOf(false) }
     var showSuccessDialog by remember { mutableStateOf(false) }
@@ -1117,38 +1057,11 @@ fun CreateCampsiteScreen(
         OutlinedTextField(
             value = imageUrlInput,
             onValueChange = { imageUrlInput = it },
-            label = { Text("Image URL (Optional, or pick gallery image below)") },
+            label = { Text("Image URL (Optional, e.g., https://...)") },
             modifier = Modifier.fillMaxWidth(),
             shape = textFieldShape,
             colors = textFieldColors
         )
-
-        // Promotional Image Picker Button & Preview
-        OutlinedButton(
-            onClick = { imagePickerLauncher.launch("image/*") },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Default.Image, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(if (selectedImageUri == null) "Select Image from Gallery" else "Gallery Image Selected ✓")
-        }
-
-        if (selectedImageUri != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = selectedImageUri,
-                    contentDescription = "Selected Image Preview",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
-        }
 
         if (feedbackMsg.isNotBlank()) {
             Text(
@@ -1187,56 +1100,27 @@ fun CreateCampsiteScreen(
                         feedbackMsg = "Error: Please enter a valid maximum occupancy."
                     }
                     else -> {
-                        isUploading = true
                         feedbackIsError = false
-                        feedbackMsg = "Uploading promotional image to Firebase Storage..."
-
-                        val publishCampsite: (String?) -> Unit = { uploadedUrl ->
-                            val finalImageUrl = uploadedUrl?.ifBlank { null } ?: imageUrlInput.trim().ifBlank { null }
-                            val created = repository.createCampsite(
-                                Campsite(
-                                    ownerId = profile.deviceId,
-                                    name = name.trim(),
-                                    description = description.trim(),
-                                    location = Geolocation(locationName = parkLocation.trim()),
-                                    pricePerNight = parsedPrice,
-                                    maxOccupancy = parsedOccupancy,
-                                    imageUrl = finalImageUrl
-                                )
+                        feedbackMsg = "Campsite registered successfully!"
+                        val created = repository.createCampsite(
+                            Campsite(
+                                ownerId = profile.deviceId,
+                                name = name.trim(),
+                                description = description.trim(),
+                                location = Geolocation(locationName = parkLocation.trim()),
+                                pricePerNight = parsedPrice,
+                                maxOccupancy = parsedOccupancy,
+                                imageUrl = imageUrlInput.trim().ifBlank { null }
                             )
-                            isUploading = false
-                            createdCampsiteId = created.id
-                            showSuccessDialog = true
-                        }
-
-                        if (selectedImageUri != null) {
-                            val storageRef = FirebaseStorage.getInstance().reference
-                            val imageRef = storageRef.child("campsite_images/${UUID.randomUUID()}.jpg")
-                            imageRef.putFile(selectedImageUri!!)
-                                .addOnSuccessListener {
-                                    imageRef.downloadUrl.addOnSuccessListener { uri ->
-                                        publishCampsite(uri.toString())
-                                    }.addOnFailureListener { e ->
-                                        isUploading = false
-                                        feedbackIsError = true
-                                        feedbackMsg = "Error getting download URL: ${e.localizedMessage}"
-                                    }
-                                }
-                                .addOnFailureListener { e ->
-                                    isUploading = false
-                                    feedbackIsError = true
-                                    feedbackMsg = "Error uploading image: ${e.localizedMessage}"
-                                }
-                        } else {
-                            publishCampsite(null)
-                        }
+                        )
+                        createdCampsiteId = created.id
+                        showSuccessDialog = true
                     }
                 }
             },
-            enabled = !isUploading,
             modifier = Modifier.fillMaxWidth().height(56.dp)
         ) {
-            Text(if (isUploading) "Uploading & Publishing..." else "Generate QR Code & Publish", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Generate QR Code & Publish", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
     }
 
@@ -1289,7 +1173,7 @@ fun ProfileAndRoleScreen(
     ) {
         Text("Your Profile", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
-        // Acceptance Criteria: Admin can navigate between views within the same profile
+        // Acceptance Criteria: Admin can navigate between views within the same profile[cite: 15]
         if (profile.isAdmin) {
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -1361,81 +1245,6 @@ fun ProfileAndRoleScreen(
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
             }
-        }
-    }
-}
-
-// =========================================================================
-// POLICY AND GUIDELINES SCREEN
-// =========================================================================
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun PolicyAndGuidelinesScreen(
-    onBack: () -> Unit
-) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("App Policy & Guidelines") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .background(Color(0xFFEDE8F8))
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            PolicyCard(
-                title = "1. Community Guidelines & General Policy",
-                content = "Welcome to Solace Campsite. Our platform connects outdoor enthusiasts with premium public and private campsites. All users are expected to treat nature, campsite owners, and fellow entrants with respect. Harassment, fraudulent bookings, or misuse of promotional codes will result in immediate suspension."
-            )
-
-            PolicyCard(
-                title = "2. Campsite Usage Rules",
-                content = "• Quiet Hours: Strictly enforced between 11:00 PM and 7:00 AM.\n" +
-                        "• Campfires: Permitted only in designated fire pits. Never leave a fire unattended.\n" +
-                        "• Wildlife Safety: Keep all food in bear-proof lockers or secure vehicles. Do not feed wildlife.\n" +
-                        "• Cleanliness: Pack out all garbage. Leave your campsite as clean as or cleaner than you found it."
-            )
-
-            PolicyCard(
-                title = "3. Cancellation & Refund Policies",
-                content = "• Standard Cancellation: Full refund if cancelled at least 7 days prior to check-in. 50% refund if cancelled 3 to 6 days prior.\n" +
-                        "• Weather & Fire Bans: 100% full refund issued automatically in the event of an official government fire ban, forest fire warning, or severe weather emergency affecting your dates."
-            )
-
-            PolicyCard(
-                title = "4. Lottery Terms & Conditions",
-                content = "• Waitlist Entry: Entrants may join active campsite lotteries during the specified registration window.\n" +
-                        "• Winner Selection: Winners are drawn randomly and notified via in-app notifications.\n" +
-                        "• Acceptance Window: Winners must accept their reservation invitation within 48 hours, or the spot will be offered to runner-up entrants.\n" +
-                        "• Capacity Limits: Some lotteries enforce waitlist capacity caps to ensure fair access."
-            )
-        }
-    }
-}
-
-@Composable
-fun PolicyCard(title: String, content: String) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            HorizontalDivider()
-            Text(content, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -2493,6 +2302,81 @@ fun AdminProfilesScreen(
             Column(modifier = Modifier.fillMaxWidth()) {
                 DateRangePicker(state = dateState, modifier = Modifier.fillMaxWidth().height(450.dp))
             }
+        }
+    }
+}
+
+// =========================================================================
+// POLICY AND GUIDELINES SCREEN
+// =========================================================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PolicyAndGuidelinesScreen(
+    onBack: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("App Policy & Guidelines") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .background(Color(0xFFEDE8F8))
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            PolicyCard(
+                title = "1. Community Guidelines & General Policy",
+                content = "Welcome to Solace Campsite. Our platform connects outdoor enthusiasts with premium public and private campsites. All users are expected to treat nature, campsite owners, and fellow entrants with respect. Harassment, fraudulent bookings, or misuse of promotional codes will result in immediate suspension."
+            )
+
+            PolicyCard(
+                title = "2. Campsite Usage Rules",
+                content = "• Quiet Hours: Strictly enforced between 11:00 PM and 7:00 AM.\n" +
+                        "• Campfires: Permitted only in designated fire pits. Never leave a fire unattended.\n" +
+                        "• Wildlife Safety: Keep all food in bear-proof lockers or secure vehicles. Do not feed wildlife.\n" +
+                        "• Cleanliness: Pack out all garbage. Leave your campsite as clean as or cleaner than you found it."
+            )
+
+            PolicyCard(
+                title = "3. Cancellation & Refund Policies",
+                content = "• Standard Cancellation: Full refund if cancelled at least 7 days prior to check-in. 50% refund if cancelled 3 to 6 days prior.\n" +
+                        "• Weather & Fire Bans: 100% full refund issued automatically in the event of an official government fire ban, forest fire warning, or severe weather emergency affecting your dates."
+            )
+
+            PolicyCard(
+                title = "4. Lottery Terms & Conditions",
+                content = "• Waitlist Entry: Entrants may join active campsite lotteries during the specified registration window.\n" +
+                        "• Winner Selection: Winners are drawn randomly and notified via in-app notifications.\n" +
+                        "• Acceptance Window: Winners must accept their reservation invitation within 48 hours, or the spot will be offered to runner-up entrants.\n" +
+                        "• Capacity Limits: Some lotteries enforce waitlist capacity caps to ensure fair access."
+            )
+        }
+    }
+}
+
+@Composable
+fun PolicyCard(title: String, content: String) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            HorizontalDivider()
+            Text(content, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }

@@ -15,11 +15,14 @@ import android.content.Context
 import android.provider.Settings
 import android.util.Log
 import com.example.solace_temp.models.*
+import com.example.solace_temp.validation.WaitingListException
+import com.example.solace_temp.validation.WaitingListRules
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 /**
@@ -178,6 +181,28 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         _currentProfile.value = profile
         db.collection("profiles").document(deviceId).set(profile)
     }
+    /**
+     * Saves the profile and reports Firestore's write result.
+     *
+     * @param profile The updated profile.
+     * @param onResult Receives success or failure when saving finishes.
+     */
+    override fun updateProfile(
+        profile: Profile,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        db.collection("profiles")
+            .document(deviceId)
+            .set(profile)
+            .addOnSuccessListener {
+                _currentProfile.value = profile
+                onResult(Result.success(Unit))
+            }
+            .addOnFailureListener { error ->
+                Log.e("FirestoreRepo", "Profile update failed", error)
+                onResult(Result.failure(error))
+            }
+    }
 
     /** Creates a new campsite in Firestore. */
     override fun createCampsite(campsite: Campsite): Campsite {
@@ -200,13 +225,16 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     }
 
     /** Adds the given entrant to the waiting list of a specific lottery in Firestore. */
-    override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit) {
+    override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) {
         val document = db.collection("lotteries").document(lotteryId)
         // Transaction makes checking capacity and joining a single atomic operation.
         db.runTransaction { tx ->
             val lottery = tx.get(document).toObject(Lottery::class.java)
                 ?: throw IllegalStateException("Lottery not found.")
             if (entrantId !in lottery.waitingListEntrantIds) {
+                if (!canJoinLottery(lottery)) {
+                    throw IllegalStateException("Lottery is not accepting entrants.")
+                }
                 val cap = lottery.waitlistCapacity
                 if (cap != null && lottery.waitingListEntrantIds.size >= cap) {
                     throw IllegalStateException("Waitlist is full.")
@@ -222,10 +250,10 @@ class FirestoreAppRepository(context: Context) : AppRepository {
             }
             true
         }.addOnSuccessListener {
-            onResult(null)
+            onResult.onResult(null)
         }.addOnFailureListener { e ->
             Log.e("FirestoreRepo", "Joining waitlist failed", e)
-            onResult(e.localizedMessage ?: "Unable to join the waitlist.")
+            onResult.onResult(e.localizedMessage ?: "Unable to join the waitlist.")
         }
     }
 
@@ -234,11 +262,180 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         db.collection("lotteries").document(lotteryId)
             .update("waitingListEntrantIds", FieldValue.arrayRemove(entrantId))
     }
+    /** Atomically checks dates, duplicates and capacity before joining (US 01.02.01). */
+    override fun joinWaitingListWithResult(
+        lotteryId: String,
+        entrantId: String,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        updateWaitingList(
+            lotteryId,
+            entrantId,
+            joining = true,
+            onResult = onResult
+        )
+    }
+
+    /** Removes this device's entry and reports the committed result (US 01.02.02). */
+    override fun leaveWaitingList(
+        lotteryId: String,
+        entrantId: String,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        updateWaitingList(
+            lotteryId,
+            entrantId,
+            joining = false,
+            onResult = onResult
+        )
+    }
+
+    private fun updateWaitingList(
+        lotteryId: String,
+        entrantId: String,
+        joining: Boolean,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        if (entrantId != deviceId || entrantId.isBlank()) {
+            onResult(
+                Result.failure(
+                    WaitingListException(
+                        "Your device profile is unavailable. Please reopen the app."
+                    )
+                )
+            )
+            return
+        }
+
+        if (lotteryId.isBlank() || '/' in lotteryId) {
+            onResult(
+                Result.failure(
+                    WaitingListException("This lottery is no longer available.")
+                )
+            )
+            return
+        }
+
+        val reference = db.collection("lotteries").document(lotteryId)
+
+        db.runTransaction { transaction ->
+            // Read the latest document on every retry, before any write.
+            val snapshot = transaction.get(reference)
+            val lottery = snapshot.toObject(Lottery::class.java)
+
+            val error = if (joining) {
+                WaitingListRules.joinError(lottery, entrantId)
+            } else {
+                WaitingListRules.leaveError(lottery, entrantId)
+            }
+
+            if (error != null) throw WaitingListException(error)
+
+            val entrants = requireNotNull(lottery).waitingListEntrantIds
+
+            val updated = if (joining) {
+                (entrants + entrantId).distinct()
+            } else {
+                entrants - entrantId
+            }
+
+            val joinedAt = if (joining) {
+                lottery.waitlistJoinedAtMillis +
+                        (entrantId to System.currentTimeMillis())
+            } else {
+                lottery.waitlistJoinedAtMillis - entrantId
+            }
+
+            transaction.update(
+                reference,
+                mapOf(
+                    "waitingListEntrantIds" to updated,
+                    "waitlistJoinedAtMillis" to joinedAt
+                )
+            )
+            null
+        }.addOnSuccessListener {
+            onResult(Result.success(Unit))
+        }.addOnFailureListener { error ->
+            Log.e("FirestoreRepo", "Waiting list update failed", error)
+            onResult(Result.failure(error))
+        }
+    }
+
+    /** Saves an invited entrant's reservation and claims its nights atomically. */
+    override fun confirmBooking(
+        campsiteId: String,
+        lotteryId: String,
+        checkInMillis: Long,
+        checkOutMillis: Long,
+        onResult: (String?) -> Unit
+    ) {
+        val nights = bookingNights(checkInMillis, checkOutMillis)
+        if (nights.isEmpty()) {
+            onResult("Choose a valid check-in and check-out date (up to 60 nights).")
+            return
+        }
+
+        val campsiteRef = db.collection("campsites").document(campsiteId)
+        val lotteryRef = db.collection("lotteries").document(lotteryId)
+        val reservationId = "res-${campsiteId}-${lotteryId}-${deviceId}"
+        val reservationRef = db.collection("reservations").document(reservationId)
+        // One document per campsite night prevents two simultaneous bookings of the same night.
+        val slotRefs = nights.map { day ->
+            db.collection("reservationSlots").document("${campsiteId}_$day")
+        }
+
+        db.runTransaction { tx ->
+            // Complete all transaction reads before writing anything.
+            val site = tx.get(campsiteRef).toObject(Campsite::class.java)
+                ?: throw IllegalStateException("Campsite not found.")
+            val lottery = tx.get(lotteryRef).toObject(Lottery::class.java)
+                ?: throw IllegalStateException("Lottery not found.")
+            val existing = tx.get(reservationRef)
+            val occupiedSlots = slotRefs.map { tx.get(it) }
+
+            val error = bookingValidationError(
+                site, lottery, deviceId, checkInMillis, checkOutMillis, _reservations.value
+            )
+            if (error != null) throw IllegalStateException(error)
+            if (existing.exists()) {
+                throw IllegalStateException("You already have a reservation for this campsite and lottery.")
+            }
+            if (occupiedSlots.any { it.exists() }) {
+                throw IllegalStateException("One or more selected dates are already booked.")
+            }
+
+            val reservation = Reservation(
+                id = reservationId,
+                campsiteId = site.id,
+                campsiteName = site.name,
+                entrantId = deviceId,
+                ownerId = site.ownerId,
+                bookedDates = nights,
+                status = ReservationStatus.ACTIVE
+            )
+            tx.set(reservationRef, reservation)
+            slotRefs.forEachIndexed { index, slotRef ->
+                tx.set(slotRef, mapOf(
+                    "reservationId" to reservationId,
+                    "campsiteId" to campsiteId,
+                    "date" to nights[index]
+                ))
+            }
+            true
+        }.addOnSuccessListener {
+            onResult(null)
+        }.addOnFailureListener { error ->
+            Log.e("FirestoreRepo", "Booking confirmation failed", error)
+            onResult(error.localizedMessage ?: "Unable to confirm the reservation.")
+        }
+    }
 
     /** Performs a random draw for the specified lottery and updates Firestore with winners. */
     override fun drawLotteryWinners(lotteryId: String) {
         val lottery = _lotteries.value.find { it.id == lotteryId } ?: return
-        val winners = lottery.waitingListEntrantIds.shuffled().take(lottery.maxWinners)
+        val count = minOf(lottery.waitingListEntrantIds.size, lottery.maxWinners)
+        val winners = lottery.waitingListEntrantIds.shuffled().take(count)
 
         db.collection("lotteries").document(lotteryId).update(
             mapOf(
@@ -248,9 +445,69 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         )
     }
 
+    /** Redraws or picks backup winners from remaining waitlist in Firestore. */
+    override fun redrawLottery(lotteryId: String) {
+        val lottery = _lotteries.value.find { it.id == lotteryId } ?: return
+        val remaining = lottery.waitingListEntrantIds.filter { id -> id !in lottery.invitedWinnerIds }
+        val needed = lottery.maxWinners - lottery.invitedWinnerIds.size
+        val newWinners = remaining.shuffled().take(needed)
+        val updatedWinners = lottery.invitedWinnerIds + newWinners
+
+        db.collection("lotteries").document(lotteryId).update(
+            mapOf(
+                "invitedWinnerIds" to updatedWinners,
+                "isDrawn" to true
+            )
+        )
+    }
+
     /** Removes a specific campsite from Firestore. */
     override fun removeCampsiteAsAdmin(campsiteId: String) {
         db.collection("campsites").document(campsiteId).delete()
+    }
+
+    override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {
+        if (deviceId.isBlank()) return
+        try {
+            db.collection("notifications").document(notificationId).delete()
+            val query = db.collection("lotteries")
+                .whereArrayContains("campsiteIds", campsiteId)
+                .get()
+                .await()
+            for (doc in query.documents) {
+                val lot = doc.toObject(Lottery::class.java) ?: continue
+                val updatedWinners = lot.invitedWinnerIds.filterNot { it == deviceId }
+                db.collection("lotteries").document(doc.id).update("invitedWinnerIds", updatedWinners)
+            }
+        } catch (e: Exception) {
+            Log.e("FirestoreRepo", "Error declining invitation", e)
+        }
+    }
+
+    override suspend fun createReservation(
+        campsiteId: String,
+        notificationId: String,
+        startDate: String,
+        endDate: String
+    ): Boolean {
+        if (deviceId.isBlank()) return false
+        return try {
+            val reservationData = hashMapOf(
+                "reservationId" to UUID.randomUUID().toString(),
+                "campsiteId" to campsiteId,
+                "entrantId" to deviceId,
+                "startDate" to startDate,
+                "endDate" to endDate,
+                "status" to "CONFIRMED",
+                "createdAt" to System.currentTimeMillis()
+            )
+            db.collection("reservations").add(reservationData).await()
+            db.collection("notifications").document(notificationId).delete().await()
+            true
+        } catch (e: Exception) {
+            Log.e("FirestoreRepo", "Error creating reservation", e)
+            false
+        }
     }
 
     /** Seeds initial dummy data into Firestore if collections are empty. */
