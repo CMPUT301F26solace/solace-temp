@@ -45,6 +45,12 @@ data class Geolocation(
  * @property role The current active [UserRole] of this user.
  * @property isAdmin Indicates if the user has admin privileges.
  */
+
+/** Enum defining the administrative status of a user account. */
+enum class AccountStatus {
+    ACTIVE, INACTIVE, SUSPENDED
+}
+
 data class Profile(
     val deviceId: String = "",
     val name: String = "",
@@ -53,7 +59,9 @@ data class Profile(
     val profileImageUrl: String? = null,
     val receiveNotifications: Boolean = true,
     val role: UserRole = UserRole.ENTRANT,
-    val isAdmin: Boolean = true // True by default in dev so TAs/team can test Admin role easily
+    val isAdmin: Boolean = true, // True by default in dev so TAs/team can test Admin role easily
+    val accountStatus: AccountStatus = AccountStatus.ACTIVE,
+    val registrationDateMillis: Long = System.currentTimeMillis()
 )
 
 /**
@@ -76,6 +84,12 @@ data class Profile(
  * @property bookingStartDateMillis The earliest permissible check-in date in milliseconds.
  * @property bookingEndDateMillis The latest permissible check-out date in milliseconds.
  */
+
+/** Enum defining the administrative status of a campsite. */
+enum class CampsiteStatus {
+    ACTIVE, DRAFT, FLAGGED
+}
+
 data class Campsite(
     val id: String = "",
     val ownerId: String = "",
@@ -87,6 +101,8 @@ data class Campsite(
     val rating: Double = 4.8,
     val imageUrl: String? = null,
     val amenities: List<String> = emptyList(),
+    val status: CampsiteStatus = CampsiteStatus.ACTIVE,
+    val dateCreatedMillis: Long = System.currentTimeMillis(),
     val tags: List<String> = emptyList(),
     val rulesAndPolicy: String = "Quiet hours 11 PM - 7 AM. Full refund if forest fire warning.",
     val qrCodePayload: String = "", // Deep link: solace://campsite/{id}
@@ -130,6 +146,9 @@ data class Lottery(
     val maxWinners: Int = 5,
     val waitlistCapacity: Int? = null, // Optional limit (US 02.04.07)
     val waitingListEntrantIds: List<String> = emptyList(),
+    // Entrant device ID -> time of joining, in epoch milliseconds.
+    // Older lotteries may not have timestamps.
+    val waitlistJoinedAtMillis: Map<String, Long> = emptyMap(),
     val invitedWinnerIds: List<String> = emptyList(),
     val isDrawn: Boolean = false
 )

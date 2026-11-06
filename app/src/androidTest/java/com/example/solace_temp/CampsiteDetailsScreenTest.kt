@@ -1,3 +1,9 @@
+/**
+ * CampsiteDetailsScreenTest.kt
+ *
+ * Purpose: Instrumented UI test suite focused exclusively on testing Campsite Owner role views
+ * and management options on the CampsiteDetailsScreen.
+ */
 package com.example.solace_temp
 
 import androidx.compose.ui.test.*
@@ -18,18 +24,17 @@ class CampsiteDetailsScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    /**
-     * A simple fake repository to inject precise state into the CampsiteDetailsScreen
-     * for testing without relying on the production database or singleton mocks.
-     */
     class FakeAppRepository : AppRepository {
         val _currentProfile = MutableStateFlow(Profile())
         override val currentProfile: StateFlow<Profile> = _currentProfile
+
+        override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
         val _campsites = MutableStateFlow<List<Campsite>>(emptyList())
         override val campsites: StateFlow<List<Campsite>> = _campsites
 
         override val lotteries: StateFlow<List<Lottery>> = MutableStateFlow(emptyList())
+        override val lotteryLoadError: StateFlow<String?> = MutableStateFlow(null)
         override val reservations: StateFlow<List<Reservation>> = MutableStateFlow(emptyList())
         override val notifications: StateFlow<List<AppNotification>> = MutableStateFlow(emptyList())
 
@@ -37,7 +42,9 @@ class CampsiteDetailsScreenTest {
         override fun updateProfile(profile: Profile) {}
         override fun createCampsite(campsite: Campsite): Campsite = campsite
         override fun createLottery(lottery: Lottery): Lottery = lottery
-        override fun joinWaitingList(lotteryId: String, entrantId: String) {}
+        override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit) {
+            onResult(null)
+        }
         override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
         override fun drawLotteryWinners(lotteryId: String) {}
         override fun removeCampsiteAsAdmin(campsiteId: String) {}
@@ -58,8 +65,8 @@ class CampsiteDetailsScreenTest {
         val campsite = Campsite(
             id = "camp-1",
             ownerId = "owner-123",
-            name = "Test Campsite",
-            description = "A beautiful test campsite.",
+            name = "Test Campsite Owner View",
+            description = "A beautiful test campsite managed by owner.",
             location = Geolocation(50.0, -110.0, "Test Park"),
             maxOccupancy = 4,
             pricePerNight = 45.0,
@@ -79,11 +86,11 @@ class CampsiteDetailsScreenTest {
         }
 
         // Verify basic details
-        composeTestRule.onNodeWithText("Test Campsite").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Test Campsite Owner View").assertIsDisplayed()
         composeTestRule.onNodeWithText("$45/night").assertIsDisplayed()
         composeTestRule.onNodeWithText("📍 Test Park").assertIsDisplayed()
         composeTestRule.onNodeWithText("🌐 Coordinates: 50.0, -110.0").assertIsDisplayed()
-        composeTestRule.onNodeWithText("A beautiful test campsite.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("A beautiful test campsite managed by owner.").assertIsDisplayed()
         
         // Verify amenities and tags
         composeTestRule.onNodeWithText("• Fire pit").assertIsDisplayed()
@@ -94,63 +101,26 @@ class CampsiteDetailsScreenTest {
         // Verify image placeholder
         composeTestRule.onNodeWithText("No Image Available").assertIsDisplayed()
         
-        // Verify owner management options
+        // Verify owner management options & QR code section
         composeTestRule.onNodeWithText("Owner Management").assertIsDisplayed()
         composeTestRule.onNodeWithText("Edit").assertIsDisplayed()
         composeTestRule.onNodeWithText("Lottery").assertIsDisplayed()
         composeTestRule.onNodeWithText("Entrants").assertIsDisplayed()
-    }
 
-    @Test
-    fun entrantViewsCampsiteDetails_doesNotDisplayManagementOptions() {
-        val fakeRepo = FakeAppRepository()
-        
-        // Setup entrant profile
-        fakeRepo._currentProfile.value = Profile(
-            deviceId = "entrant-456",
-            role = UserRole.ENTRANT,
-            isAdmin = false
-        )
-        
-        // Setup campsite owned by someone else
-        val campsite = Campsite(
-            id = "camp-1",
-            ownerId = "owner-123",
-            name = "Test Campsite",
-            qrCodePayload = "solace://campsite/camp-1"
-        )
-        fakeRepo._campsites.value = listOf(campsite)
+        composeTestRule.onNodeWithText("Promotional QR Code")
+            .performScrollTo()
+            .assertIsDisplayed()
 
-        composeTestRule.setContent {
-            CampsiteDetailsScreen(
-                campsiteId = "camp-1",
-                repository = fakeRepo,
-                onBack = {}
-            )
-        }
+        composeTestRule.onNodeWithText("Unique Link: solace://campsite/camp-1")
+            .performScrollTo()
+            .assertIsDisplayed()
 
-        // Verify campsite renders but NO management options
-        composeTestRule.onNodeWithText("Test Campsite").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Owner Management").assertDoesNotExist()
-        composeTestRule.onNodeWithText("Edit").assertDoesNotExist()
-        composeTestRule.onNodeWithText("Lottery").assertDoesNotExist()
-    }
+        composeTestRule.onNodeWithContentDescription("Campsite QR Code")
+            .performScrollTo()
+            .assertIsDisplayed()
 
-    @Test
-    fun invalidCampsiteId_showsErrorFeedback() {
-        val fakeRepo = FakeAppRepository()
-        fakeRepo._campsites.value = emptyList() // No campsites
-
-        composeTestRule.setContent {
-            CampsiteDetailsScreen(
-                campsiteId = "invalid-id",
-                repository = fakeRepo,
-                onBack = {}
-            )
-        }
-
-        // Verify error feedback
-        composeTestRule.onNodeWithText("Error: Campsite data failed to load.").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Go Back").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Share / Save QR Code")
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 }

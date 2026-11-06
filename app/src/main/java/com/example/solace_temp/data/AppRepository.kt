@@ -25,12 +25,18 @@ import java.util.UUID
 interface AppRepository {
     /** The currently active user's profile. */
     val currentProfile: StateFlow<Profile>
+
+    /** List of all registered profiles in the system. */
+    val profiles: StateFlow<List<Profile>>
     
     /** List of all campsites available in the system. */
     val campsites: StateFlow<List<Campsite>>
     
     /** List of all active lotteries for campsites. */
     val lotteries: StateFlow<List<Lottery>>
+
+    /** Null when lottery loading succeeds, otherwise a user-readable database error. */
+    val lotteryLoadError: StateFlow<String?>
     
     /** List of reservations made across the platform. */
     val reservations: StateFlow<List<Reservation>>
@@ -88,7 +94,7 @@ interface AppRepository {
      * @param lotteryId The unique ID of the lottery.
      * @param entrantId The unique ID of the entrant joining the waitlist.
      */
-    fun joinWaitingList(lotteryId: String, entrantId: String)
+    fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit = {})
     
     /**
      * Removes an entrant from a lottery's waiting list.
@@ -183,6 +189,12 @@ object MockAppRepository : AppRepository {
     /** Exposes the mock current profile state. */
     override val currentProfile: StateFlow<Profile> = _currentProfile.asStateFlow()
 
+    /** Internal state flow holding the mock list of all profiles. */
+    private val _profiles = MutableStateFlow(listOf(_currentProfile.value))
+
+    /** Exposes the mock list of profiles. */
+    override val profiles: StateFlow<List<Profile>> = _profiles.asStateFlow()
+
     /** Internal state flow holding the mock campsites list. */
     private val _campsites = MutableStateFlow(
         listOf(
@@ -236,6 +248,8 @@ object MockAppRepository : AppRepository {
     
     /** Exposes the mock lotteries state. */
     override val lotteries: StateFlow<List<Lottery>> = _lotteries.asStateFlow()
+
+    override val lotteryLoadError: StateFlow<String?> = MutableStateFlow(null)
 
     /** Internal state flow holding the mock reservations list. */
     private val _reservations = MutableStateFlow<List<Reservation>>(emptyList())
@@ -291,14 +305,27 @@ object MockAppRepository : AppRepository {
     }
 
     /** Simulates a user joining the waiting list for a mock lottery. */
-    override fun joinWaitingList(lotteryId: String, entrantId: String) {
-        _lotteries.update { list ->
-            list.map {
-                if (it.id == lotteryId && !it.waitingListEntrantIds.contains(entrantId)) {
-                    it.copy(waitingListEntrantIds = it.waitingListEntrantIds + entrantId)
-                } else it
+    override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit) {
+        val lottery = _lotteries.value.find { it.id == lotteryId }
+        val error = when {
+            lottery == null -> "Lottery not found."
+            entrantId in lottery.waitingListEntrantIds -> null
+            lottery.waitlistCapacity != null &&
+                lottery.waitingListEntrantIds.size >= lottery.waitlistCapacity -> "Waitlist is full."
+            else -> null
+        }
+        if (error == null && lottery != null && entrantId !in lottery.waitingListEntrantIds) {
+            _lotteries.update { list ->
+                list.map {
+                    if (it.id == lotteryId) it.copy(
+                        waitingListEntrantIds = it.waitingListEntrantIds + entrantId,
+                        waitlistJoinedAtMillis = it.waitlistJoinedAtMillis +
+                            (entrantId to System.currentTimeMillis())
+                    ) else it
+                }
             }
         }
+        onResult(error)
     }
 
     /** Simulates a user leaving the waiting list for a mock lottery. */
