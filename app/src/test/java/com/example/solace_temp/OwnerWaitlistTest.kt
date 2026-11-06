@@ -17,7 +17,7 @@ class OwnerWaitlistTest {
                 waitingListEntrantIds = listOf("already-on-list"))
         )
         var error: String? = null
-        MockAppRepository.joinWaitingList(lottery.id, "new-entrant") { error = it }
+        MockAppRepository.joinWaitingList(lottery.id, "new-entrant", com.example.solace_temp.data.WaitingListErrorCallback { error = it })
         assertEquals("Waitlist is full.", error)
         assertFalse(MockAppRepository.lotteries.value
             .first { it.id == lottery.id }.waitingListEntrantIds.contains("new-entrant"))
@@ -29,7 +29,7 @@ class OwnerWaitlistTest {
             Lottery(maxWinners = 1, waitlistCapacity = 2)
         )
         var error: String? = "unsubmitted"
-        MockAppRepository.joinWaitingList(lottery.id, "test-entrant") { error = it }
+        MockAppRepository.joinWaitingList(lottery.id, "test-entrant", com.example.solace_temp.data.WaitingListErrorCallback { error = it })
         assertNull(error)
         val saved = MockAppRepository.lotteries.value.first { it.id == lottery.id }
         assertTrue("test-entrant" in saved.waitingListEntrantIds)
@@ -42,7 +42,7 @@ class OwnerWaitlistTest {
         val entrants = listOf("entrant-a", "entrant-b", "entrant-c")
         entrants.forEach { id ->
             var error: String? = "not submitted"
-            MockAppRepository.joinWaitingList(lottery.id, id) { error = it }
+            MockAppRepository.joinWaitingList(lottery.id, id, com.example.solace_temp.data.WaitingListErrorCallback { error = it })
             assertNull(error)
         }
         val saved = MockAppRepository.lotteries.value.first { it.id == lottery.id }

@@ -58,7 +58,7 @@ class LotteryToBookingWorkflowTest {
             for (entrantId in listOf(firstEntrantId, secondEntrantId)) {
                 repo.updateProfile(originalProfile.copy(deviceId = entrantId, role = UserRole.ENTRANT))
                 var joinError: String? = "Callback not called"
-                repo.joinWaitingList(lottery.id, entrantId) { joinError = it }
+                repo.joinWaitingList(lottery.id, entrantId, com.example.solace_temp.data.WaitingListErrorCallback { joinError = it })
                 assertNull(joinError)
             }
             assertEquals(

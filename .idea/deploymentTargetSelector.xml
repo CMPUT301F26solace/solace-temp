@@ -6,6 +6,11 @@
         <option name="selectionMode" value="DROPDOWN" />
         <DialogSelection />
       </SelectionState>
+      <SelectionState runConfigName="AdminProfilesScreenTest">
+        <option name="selectionMode" value="DROPDOWN" />
+        <DialogSelection />
+      </SelectionState>
+      <SelectionState runConfigName="ProfileAndRoleScreenTest">
       <SelectionState runConfigName="CampsiteDetailsScreenTest">
         <option name="selectionMode" value="DROPDOWN" />
         <DialogSelection />

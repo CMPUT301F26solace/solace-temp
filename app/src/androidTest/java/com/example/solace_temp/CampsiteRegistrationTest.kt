@@ -30,6 +30,7 @@ class CampsiteRegistrationTest {
     class RegistrationFakeRepository : AppRepository {
         val _currentProfile = MutableStateFlow(Profile(deviceId = "owner-test", role = UserRole.CAMPSITE_OWNER))
         override val currentProfile: StateFlow<Profile> = _currentProfile
+        override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
         override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
