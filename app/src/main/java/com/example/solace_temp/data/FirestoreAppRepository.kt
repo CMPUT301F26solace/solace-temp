@@ -263,7 +263,7 @@ class FirestoreAppRepository(context: Context) : AppRepository {
             .update("waitingListEntrantIds", FieldValue.arrayRemove(entrantId))
     }
     /** Atomically checks dates, duplicates and capacity before joining (US 01.02.01). */
-    override fun joinWaitingList(
+    override fun joinWaitingListWithResult(
         lotteryId: String,
         entrantId: String,
         onResult: (Result<Unit>) -> Unit
@@ -339,7 +339,20 @@ class FirestoreAppRepository(context: Context) : AppRepository {
                 entrants - entrantId
             }
 
-            transaction.update(reference, "waitingListEntrantIds", updated)
+            val joinedAt = if (joining) {
+                lottery.waitlistJoinedAtMillis +
+                        (entrantId to System.currentTimeMillis())
+            } else {
+                lottery.waitlistJoinedAtMillis - entrantId
+            }
+
+            transaction.update(
+                reference,
+                mapOf(
+                    "waitingListEntrantIds" to updated,
+                    "waitlistJoinedAtMillis" to joinedAt
+                )
+            )
             null
         }.addOnSuccessListener {
             onResult(Result.success(Unit))

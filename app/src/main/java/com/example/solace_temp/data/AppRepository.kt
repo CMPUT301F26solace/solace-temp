@@ -105,28 +105,34 @@ interface AppRepository {
 
     /**
      * Joins after checking the current lottery and reports completion (US 01.02.01).
-     * Synchronous repositories use this default; Firestore overrides it atomically.
+     * Bridges the existing string-error callback; Firestore overrides it atomically.
      *
      * @param lotteryId The lottery to join.
      * @param entrantId The existing entrant device ID.
      * @param onResult Receives success or the reason entry failed.
      */
-    fun joinWaitingList(
+    fun joinWaitingListWithResult(
         lotteryId: String,
         entrantId: String,
         onResult: (Result<Unit>) -> Unit
     ) {
-        val result = runCatching {
-            val lottery = lotteries.value.find { it.id == lotteryId }
+        val lottery = lotteries.value.find { it.id == lotteryId }
+        val error = WaitingListRules.joinError(lottery, entrantId)
 
-            WaitingListRules.joinError(lottery, entrantId)?.let {
-                throw WaitingListException(it)
-            }
-
-            joinWaitingList(lotteryId, entrantId)
+        if (error != null) {
+            onResult(Result.failure(WaitingListException(error)))
+            return
         }
 
-        onResult(result)
+        joinWaitingList(lotteryId, entrantId) { message ->
+            onResult(
+                if (message == null) {
+                    Result.success(Unit)
+                } else {
+                    Result.failure(WaitingListException(message))
+                }
+            )
+        }
     }
 
     /**
@@ -333,8 +339,15 @@ object MockAppRepository : AppRepository {
         _lotteries.update { list ->
             list.map {
                 if (it.id == lotteryId) {
-                    it.copy(waitingListEntrantIds = it.waitingListEntrantIds - entrantId)
-                } else it
+                    it.copy(
+                        waitingListEntrantIds =
+                            it.waitingListEntrantIds - entrantId,
+                        waitlistJoinedAtMillis =
+                            it.waitlistJoinedAtMillis - entrantId
+                    )
+                } else {
+                    it
+                }
             }
         }
     }

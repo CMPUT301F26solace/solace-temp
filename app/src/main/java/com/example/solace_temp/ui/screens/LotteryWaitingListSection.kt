@@ -155,7 +155,7 @@ private fun WaitingListCard(
                         isSaving = true
                         feedback = null
 
-                        repository.joinWaitingList(lottery.id, entrantId) {
+                        repository.joinWaitingListWithResult(lottery.id, entrantId) {
                             finish(it, joined = true)
                         }
                     }
