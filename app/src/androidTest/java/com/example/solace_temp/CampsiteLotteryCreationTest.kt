@@ -41,6 +41,7 @@ class CampsiteLotteryCreationTest {
                 pricePerNight = 50.0
             )
         ))
+        override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
         override val campsites: StateFlow<List<Campsite>> = _campsites
 
         val _lotteries = MutableStateFlow<List<Lottery>>(emptyList())

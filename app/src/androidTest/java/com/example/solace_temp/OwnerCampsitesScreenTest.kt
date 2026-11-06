@@ -25,6 +25,7 @@ class OwnerCampsitesScreenTest {
         override val currentProfile: StateFlow<Profile> = _currentProfile
 
         val _campsites = MutableStateFlow<List<Campsite>>(emptyList())
+        override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
         override val campsites: StateFlow<List<Campsite>> = _campsites
 
         override val lotteries: StateFlow<List<Lottery>> = MutableStateFlow(emptyList())

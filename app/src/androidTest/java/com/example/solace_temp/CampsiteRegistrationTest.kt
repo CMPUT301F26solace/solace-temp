@@ -33,6 +33,7 @@ class CampsiteRegistrationTest {
         override val currentProfile: StateFlow<Profile> = _currentProfile
 
         val _campsites = MutableStateFlow<List<Campsite>>(emptyList())
+        override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
         override val campsites: StateFlow<List<Campsite>> = _campsites
 
         override val lotteries: StateFlow<List<Lottery>> = MutableStateFlow(emptyList())
@@ -69,8 +70,8 @@ class CampsiteRegistrationTest {
             CreateCampsiteScreen(repository = fakeRepo, onCreated = {})
         }
 
-        composeTestRule.onNodeWithText("Generate QR Code & Publish").performClick()
-        composeTestRule.onNodeWithText("Error: Campsite name cannot be empty.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Generate QR Code & Publish").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Error: Campsite name cannot be empty.").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -82,8 +83,8 @@ class CampsiteRegistrationTest {
         }
 
         composeTestRule.onNodeWithText("Campsite Name (Required)").performTextInput("Camp Pine")
-        composeTestRule.onNodeWithText("Generate QR Code & Publish").performClick()
-        composeTestRule.onNodeWithText("Error: Location cannot be empty.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Generate QR Code & Publish").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Error: Location cannot be empty.").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -104,7 +105,7 @@ class CampsiteRegistrationTest {
         composeTestRule.onNodeWithText("Price per Night ($) (Required)").performTextInput("75.0")
         composeTestRule.onNodeWithText("Maximum Occupancy (Required)").performTextInput("6")
 
-        composeTestRule.onNodeWithText("Generate QR Code & Publish").performClick()
+        composeTestRule.onNodeWithText("Generate QR Code & Publish").performScrollTo().performClick()
 
         // Verify success popup confirmation appears
         composeTestRule.onNodeWithText("Campsite Created Successfully").assertIsDisplayed()
