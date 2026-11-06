@@ -1,5 +1,4 @@
 /**
- * MainActivity.kt
  * 
  * Purpose: This is the main entry point for the Solace Campsite application.
  * It sets up the Compose activity, navigation graph, and the bottom navigation bar.
@@ -216,7 +215,9 @@ fun SolaceCampsiteApp() {
                     OwnerCampsitesScreen(
                         repository = repository,
                         onSelectCampsite = { id -> navController.navigate("campsite_details/$id") },
-                        onCreateNew = { navController.navigate(BottomNavItem.OwnerCreate.route) }
+                        onCreateNew = { navController.navigate(BottomNavItem.OwnerCreate.route) },
+                        onViewReservations = { navController.navigate("owner_reservations") },
+                        onViewCalendar = { navController.navigate("owner_calendar") }
                     )
                 }
                 composable(BottomNavItem.OwnerCreate.route) {
@@ -250,6 +251,19 @@ fun SolaceCampsiteApp() {
                 composable("owner_waitlist/{lotteryId}") { backStackEntry ->
                     OwnerWaitlistScreen(
                         lotteryId = backStackEntry.arguments?.getString("lotteryId") ?: "",
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable("owner_reservations") {
+                    OwnerReservationsScreen(
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("owner_calendar") {
+                    OwnerCalendarScreen(
                         repository = repository,
                         onBack = { navController.popBackStack() }
                     )

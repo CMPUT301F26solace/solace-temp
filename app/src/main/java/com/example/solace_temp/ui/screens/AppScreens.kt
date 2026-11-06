@@ -63,6 +63,8 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.platform.testTag
+import com.example.solace_temp.validation.ProfileValidator
 import kotlinx.coroutines.delay
 
 // =========================================================================
@@ -180,19 +182,16 @@ fun formatDateMillis(millis: Long?): String {
  */
 fun getLotteryStatus(lottery: Lottery?, campsite: Campsite? = null): String {
     if (lottery == null) return "N/A"
-    if (lottery.isDrawn) return "Finished"
     val now = System.currentTimeMillis()
     val regStart = lottery.registrationStartMillis ?: 0L
     val regEnd = lottery.registrationEndMillis ?: Long.MAX_VALUE
-    val bookingStart = lottery.bookingStartMillis ?: campsite?.bookingStartDateMillis ?: regEnd
     val bookingEnd = lottery.bookingEndMillis ?: campsite?.bookingEndDateMillis ?: Long.MAX_VALUE
 
     return when {
         now < regStart -> "Upcoming"
         now in regStart..regEnd -> "Active"
-        now in bookingStart..bookingEnd || now in (regEnd + 1)..bookingEnd -> "Booking"
         now > bookingEnd -> "Finished"
-        else -> "N/A"
+        else -> "Booking"
     }
 }
 
@@ -239,8 +238,16 @@ fun CampsiteDetailsScreen(
     val qrBitmap = remember(campsite.qrCodePayload) {
         QrCodeGeneratorUtil.generateQrBitmap(campsite.qrCodePayload)
     }
-    val activeLottery = lotteries.find { it.campsiteIds.contains(campsite.id) && getLotteryStatus(it, campsite) != "Finished" && getLotteryStatus(it, campsite) != "N/A" }
-    val isInWaitlist = activeLottery?.waitingListEntrantIds?.contains(profile.deviceId) == true
+    val activeLottery = lotteries.find {
+        it.campsiteIds.contains(campsite.id) &&
+                if (profile.role == UserRole.ENTRANT) {
+                    com.example.solace_temp.validation.WaitingListRules
+                        .entryError(it) == null
+                } else {
+                    getLotteryStatus(it, campsite) != "Finished" &&
+                            getLotteryStatus(it, campsite) != "N/A"
+                }
+    }
 
     Scaffold(
         topBar = {
@@ -378,7 +385,13 @@ fun CampsiteDetailsScreen(
                             Column(Modifier.padding(12.dp)) {
                                 if (activeLottery != null) {
                                     Text("Name: ${activeLottery.name}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                    val status = getLotteryStatus(activeLottery, campsite)
+                                    val status = if (
+                                        profile.role == UserRole.ENTRANT
+                                    ) {
+                                        "Accepting waiting-list entries"
+                                    } else {
+                                        getLotteryStatus(activeLottery, campsite)
+                                    }
                                     Text("Status: $status", style = MaterialTheme.typography.bodySmall, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
                                     Text(
                                         "Registration Window: ${activeLottery.registrationStart.ifBlank { formatDateMillis(activeLottery.registrationStartMillis) }} to ${activeLottery.registrationEnd.ifBlank { formatDateMillis(activeLottery.registrationEndMillis) }}",
@@ -406,6 +419,8 @@ fun CampsiteDetailsScreen(
             // ENTRANT ACTIONS: Join / Leave Waiting List (US 01.01.06, US 01.02.01)
             if (profile.role == UserRole.ENTRANT) {
                 var showBookingDialog by remember { mutableStateOf(false) }
+                var bookingPending by remember { mutableStateOf(false) }
+                var bookingDialogError by remember { mutableStateOf("") }
                 var entrantFeedback by remember { mutableStateOf("") }
                 
                 Spacer(Modifier.height(12.dp))
@@ -432,73 +447,59 @@ fun CampsiteDetailsScreen(
                     DatePickerDialog(
                         onDismissRequest = { showBookingDialog = false },
                         confirmButton = {
-                            TextButton(onClick = {
-                                val selStart = dateState.selectedStartDateMillis
-                                val selEnd = dateState.selectedEndDateMillis
-                                val campStart = campsite.bookingStartDateMillis ?: 0L
-                                val campEnd = campsite.bookingEndDateMillis ?: Long.MAX_VALUE
-                                
-                                if (selStart == null || selEnd == null) {
-                                    entrantFeedback = "Error: Please select both a check-in and check-out date."
-                                } else if (selStart < campStart || selEnd > campEnd) {
-                                    entrantFeedback = "Error: Selected dates are outside the allowed booking period of ${formatDateMillis(campStart)} to ${formatDateMillis(campEnd)}."
-                                } else {
-                                    entrantFeedback = "Success! Dates are within the allowed booking period."
+                            TextButton(
+                                enabled = !bookingPending,
+                                onClick = {
+                                    val selStart = dateState.selectedStartDateMillis
+                                    val selEnd = dateState.selectedEndDateMillis
+                                    val lottery = lotteries.filter {
+                                        campsite.id in it.campsiteIds && profile.deviceId in it.invitedWinnerIds
+                                    }.maxByOrNull { it.bookingStartMillis ?: 0L } ?: activeLottery
+                                    bookingDialogError = ""
+                                    if (selStart == null || selEnd == null || selEnd <= selStart) {
+                                        bookingDialogError = "Select valid check-in and check-out dates."
+                                    } else if (lottery == null) {
+                                        bookingDialogError = "No active lottery is available for this campsite."
+                                    } else {
+                                        bookingPending = true
+                                        repository.confirmBooking(campsite.id, lottery.id, selStart, selEnd) { error ->
+                                            bookingPending = false
+                                            if (error != null) {
+                                                bookingDialogError = error
+                                                entrantFeedback = "Error: $error"
+                                            } else {
+                                                entrantFeedback = "Reservation confirmed! Your dates are now booked."
+                                                showBookingDialog = false
+                                            }
+                                        }
+                                    }
                                 }
-                                showBookingDialog = false
-                            }) {
-                                Text("Confirm Booking")
+                            ) {
+                                Text(if (bookingPending) "Confirming..." else "Confirm Booking")
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showBookingDialog = false }) { Text("Cancel") }
                         }
                     ) {
-                        DateRangePicker(state = dateState, modifier = Modifier.weight(1f))
-                    }
-                }
-                
-                if (activeLottery != null) {
-                    val lotteryStatus = getLotteryStatus(activeLottery, campsite)
-                    val isRegistrationOpen = lotteryStatus == "Active"
-
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            val now = System.currentTimeMillis()
-                            val regStart = activeLottery.registrationStartMillis ?: 0L
-                            val regEnd = activeLottery.registrationEndMillis ?: Long.MAX_VALUE
-                            if (now < regStart) {
-                                entrantFeedback = "Error: Registration has not opened yet. Opens on ${activeLottery.registrationStart.ifBlank { formatDateMillis(regStart) }}."
-                            } else if (now > regEnd) {
-                                entrantFeedback = "Error: Registration period has closed."
-                            } else {
-                                repository.joinWaitingList(activeLottery.id, profile.deviceId) { error ->
-                                    entrantFeedback = error?.let { "Error: $it" }
-                                        ?: "Successfully joined waiting list!"
-                                }
+                        Column {
+                            if (bookingDialogError.isNotBlank()) {
+                                Text(
+                                    bookingDialogError,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
                             }
-                        },
-                        enabled = isRegistrationOpen && !isInWaitlist,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE11D48)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (isInWaitlist) "Already on Waiting List" else "+ Join Waiting List")
-                    }
-
-                    if (!isInWaitlist && activeLottery.waitlistCapacity != null &&
-                        activeLottery.waitingListEntrantIds.size >= activeLottery.waitlistCapacity) {
-                        Text("Waitlist is full.", color = MaterialTheme.colorScheme.error)
-                    }
-
-                    OutlinedButton(
-                        onClick = { repository.leaveWaitingList(activeLottery.id, profile.deviceId) },
-                        enabled = isInWaitlist,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Leave Waiting List")
+                            DateRangePicker(state = dateState, modifier = Modifier.weight(1f))
+                        }
                     }
                 }
+
+                // US 01.01.06, US 01.02.01 and US 01.02.02.
+                LotteryWaitingListSection(
+                    campsiteId = campsite.id,
+                    repository = repository
+                )
             }
 
             // CAMPSITE OWNER QR CODE & MANAGEMENT SECTION
@@ -715,7 +716,9 @@ fun CampsiteListScreen(
 fun OwnerCampsitesScreen(
     repository: AppRepository,
     onSelectCampsite: (String) -> Unit,
-    onCreateNew: () -> Unit
+    onCreateNew: () -> Unit,
+    onViewReservations: () -> Unit = {},
+    onViewCalendar: () -> Unit = {}
 ) {
     val profile by repository.currentProfile.collectAsState()
     val campsites by repository.campsites.collectAsState()
@@ -739,7 +742,15 @@ fun OwnerCampsitesScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
         )
-        Spacer(Modifier.height(4.dp))
+        Row(modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onViewReservations, modifier = Modifier.weight(1f)) {
+                Text("Reservations")
+            }
+            OutlinedButton(onClick = onViewCalendar, modifier = Modifier.weight(1f)) {
+                Text("Booked Dates")
+            }
+        }
 
         if (myCampsites.isEmpty()) {
             Box(
@@ -1131,10 +1142,28 @@ fun CreateCampsiteScreen(
 @Composable
 fun ProfileAndRoleScreen(repository: AppRepository) {
     val profile by repository.currentProfile.collectAsState()
-    var name by remember(profile.name) { mutableStateOf(profile.name) }
-    var email by remember(profile.email) { mutableStateOf(profile.email) }
-    var phone by remember(profile.phone) { mutableStateOf(profile.phone) }
-    var receiveNotifs by remember(profile.receiveNotifications) { mutableStateOf(profile.receiveNotifications) }
+
+    var name by remember(profile.name) {
+        mutableStateOf(profile.name)
+    }
+    var email by remember(profile.email) {
+        mutableStateOf(profile.email)
+    }
+    var phone by remember(profile.phone) {
+        mutableStateOf(profile.phone)
+    }
+    var receiveNotifs by remember(profile.receiveNotifications) {
+        mutableStateOf(profile.receiveNotifications)
+    }
+
+    var showErrors by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
+    var saveFeedback by remember { mutableStateOf<String?>(null) }
+    var saveFailed by remember { mutableStateOf(false) }
+
+    val nameError = ProfileValidator.nameError(name)
+    val emailError = ProfileValidator.emailError(email)
+    val phoneError = ProfileValidator.phoneError(phone)
 
     Column(
         modifier = Modifier
@@ -1144,7 +1173,11 @@ fun ProfileAndRoleScreen(repository: AppRepository) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Your Profile", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Your Profile",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
 
         // Acceptance Criteria: Admin can navigate between views within the same profile[cite: 15]
         if (profile.isAdmin) {
@@ -1176,10 +1209,69 @@ fun ProfileAndRoleScreen(repository: AppRepository) {
             colors = CardDefaults.cardColors(containerColor = Color.White),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Phone (Optional)") }, modifier = Modifier.fillMaxWidth())
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        saveFeedback = null
+                    },
+                    label = { Text("Name") },
+                    enabled = !isSaving,
+                    singleLine = true,
+                    isError = showErrors && nameError != null,
+                    supportingText = {
+                        if (showErrors && nameError != null) {
+                            Text(nameError)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_name")
+                )
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        saveFeedback = null
+                    },
+                    label = { Text("Email") },
+                    enabled = !isSaving,
+                    singleLine = true,
+                    isError = showErrors && emailError != null,
+                    supportingText = {
+                        if (showErrors && emailError != null) {
+                            Text(emailError)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_email")
+                )
+
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = {
+                        phone = it
+                        saveFeedback = null
+                    },
+                    label = { Text("Phone (Optional)") },
+                    enabled = !isSaving,
+                    singleLine = true,
+                    isError = showErrors && phoneError != null,
+                    supportingText = {
+                        if (showErrors && phoneError != null) {
+                            Text(phoneError)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_phone")
+                )
 
                 Row(
                     Modifier.fillMaxWidth(),
@@ -1187,19 +1279,72 @@ fun ProfileAndRoleScreen(repository: AppRepository) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Receive Notifications")
-                    Switch(checked = receiveNotifs, onCheckedChange = { receiveNotifs = it })
+                    Switch(
+                        checked = receiveNotifs,
+                        onCheckedChange = { receiveNotifs = it }
+                    )
                 }
 
                 Button(
                     onClick = {
-                        repository.updateProfile(
-                            profile.copy(name = name, email = email, phone = phone, receiveNotifications = receiveNotifs)
-                        )
+                        showErrors = true
+                        saveFeedback = null
+
+                        if (
+                            !isSaving &&
+                            nameError == null &&
+                            emailError == null &&
+                            phoneError == null
+                        ) {
+                            isSaving = true
+
+                            val updatedProfile = profile.copy(
+                                name = name.trim(),
+                                email = email.trim(),
+                                phone = phone.trim(),
+                                receiveNotifications = receiveNotifs
+                            )
+
+                            repository.updateProfile(
+                                profile = updatedProfile,
+                                onResult = { result ->
+                                    isSaving = false
+                                    saveFailed = result.isFailure
+
+                                    if (result.isSuccess) {
+                                        showErrors = false
+                                        saveFeedback = "Profile updated."
+                                    } else {
+                                        saveFeedback =
+                                            "Could not save your profile. Please try again."
+                                    }
+                                }
+                            )
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE11D48)),
-                    modifier = Modifier.fillMaxWidth()
+                    enabled = !isSaving,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE11D48)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_save")
                 ) {
-                    Text("Save Changes")
+                    Text(
+                        if (isSaving) "Saving..." else "Save Changes"
+                    )
+                }
+
+                saveFeedback?.let { message ->
+                    Text(
+                        text = message,
+                        color = if (saveFailed) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                        modifier = Modifier.testTag("profile_save_feedback")
+                    )
                 }
 
                 Text(
@@ -1563,31 +1708,172 @@ fun LotteryDetailsScreen(
                     }
                 }
 
-                // Placeholder card for future lottery draw controls and management features
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                // Lottery Drawing System & Controls (Replaces Lottery Sampling & Draw Controls)
+                LotteryDrawingControlSection(
+                    lottery = lottery,
+                    repository = repository,
+                    associatedCampsites = associatedCampsites
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LotteryDrawingControlSection(
+    lottery: Lottery,
+    repository: AppRepository,
+    associatedCampsites: List<Campsite>
+) {
+    val reservations by repository.reservations.collectAsState()
+    val lotteryStatus = getLotteryStatus(lottery, associatedCampsites.firstOrNull())
+    val now = System.currentTimeMillis()
+
+    val regEnd = lottery.registrationEndMillis ?: 0L
+    LaunchedEffect(lottery.id, lotteryStatus, regEnd) {
+        if (lotteryStatus == "Booking" && !lottery.isDrawn && regEnd > 0L && now >= regEnd) {
+            repository.drawLotteryWinners(lottery.id)
+        }
+    }
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = "Lottery Drawing & Management",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            when (lotteryStatus) {
+                "Upcoming" -> {
+                    val startMillis = lottery.registrationStartMillis ?: (now + 86400000L)
+                    LotteryCountdownTimer(targetMillis = startMillis, label = "Lottery opening in:")
+                }
+                "Active" -> {
+                    val endMillis = lottery.registrationEndMillis ?: (now + 86400000L)
+                    LotteryCountdownTimer(targetMillis = endMillis, label = "Lottery drawing in:")
+                }
+                "Booking" -> {
+                    val reservedCount = reservations.count { res ->
+                        res.campsiteId in lottery.campsiteIds && res.status == ReservationStatus.ACTIVE
+                    }
+                    Text(
+                        text = "People who have reserved: $reservedCount",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Button(
+                        onClick = { repository.redrawLottery(lottery.id) },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            "Lottery Sampling & Draw Controls",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Advanced sampling algorithms, winner draw triggers, and notification management will appear here in future updates.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
+                        Text("Redraw")
                     }
                 }
+                "Finished" -> {
+                    val confirmedReservations = reservations.filter { res ->
+                        res.campsiteId in lottery.campsiteIds && res.status == ReservationStatus.ACTIVE
+                    }
+                    Text(
+                        text = "Finished Lottery Results & Reservations (${confirmedReservations.size})",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (confirmedReservations.isEmpty() && lottery.invitedWinnerIds.isEmpty()) {
+                        Text(
+                            text = "No winner reservations were completed. Sad outcome! 😢",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            confirmedReservations.forEach { res ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Text("Winner / Entrant: ${res.entrantId}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                        Text("Reserved Dates: ${res.bookedDates.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF2E7D32))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    Text(
+                        text = "Status evaluation N/A",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+fun LotteryCountdownTimer(
+    targetMillis: Long,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    var timeLeft by remember { mutableStateOf(targetMillis - System.currentTimeMillis()) }
+
+    LaunchedEffect(targetMillis) {
+        while (true) {
+            timeLeft = targetMillis - System.currentTimeMillis()
+            delay(1000L)
+        }
+    }
+
+    val displayTime = if (timeLeft <= 0) {
+        "00:00:00 (Expired / Ready)"
+    } else {
+        val seconds = (timeLeft / 1000) % 60
+        val minutes = (timeLeft / (1000 * 60)) % 60
+        val hours = (timeLeft / (1000 * 60 * 60)) % 24
+        val days = timeLeft / (1000 * 60 * 60 * 24)
+        if (days > 0) {
+            String.format(Locale.getDefault(), "%d days, %02d:%02d:%02d", days, hours, minutes, seconds)
+        } else {
+            String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds)
+        }
+    }
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+                text = displayTime,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }

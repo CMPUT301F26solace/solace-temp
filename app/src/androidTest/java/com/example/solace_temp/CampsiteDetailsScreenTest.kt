@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import androidx.compose.ui.test.performScrollTo
 
 @RunWith(AndroidJUnit4::class)
 class CampsiteDetailsScreenTest {
@@ -27,6 +28,7 @@ class CampsiteDetailsScreenTest {
     class FakeAppRepository : AppRepository {
         val _currentProfile = MutableStateFlow(Profile())
         override val currentProfile: StateFlow<Profile> = _currentProfile
+        override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
         override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
@@ -47,6 +49,7 @@ class CampsiteDetailsScreenTest {
         }
         override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
         override fun drawLotteryWinners(lotteryId: String) {}
+        override fun redrawLottery(lotteryId: String) {}
         override fun removeCampsiteAsAdmin(campsiteId: String) {}
         override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {}
     }
@@ -103,8 +106,12 @@ class CampsiteDetailsScreenTest {
         composeTestRule.onNodeWithText("No Image Available").assertIsDisplayed()
         
         // Verify owner management options & QR code section
-        composeTestRule.onNodeWithText("Owner Management").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Edit").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Owner Management", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Edit", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
         composeTestRule.onNodeWithText("Lottery").assertIsDisplayed()
         composeTestRule.onNodeWithText("Entrants").assertIsDisplayed()
 

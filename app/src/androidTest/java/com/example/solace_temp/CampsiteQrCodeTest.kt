@@ -27,6 +27,7 @@ class CampsiteQrCodeTest {
     class QrFakeRepository : AppRepository {
         val _currentProfile = MutableStateFlow(Profile())
         override val currentProfile: StateFlow<Profile> = _currentProfile
+        override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
         override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
@@ -47,6 +48,7 @@ class CampsiteQrCodeTest {
         }
         override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
         override fun drawLotteryWinners(lotteryId: String) {}
+        override fun redrawLottery(lotteryId: String) {}
         override fun removeCampsiteAsAdmin(campsiteId: String) {}
         override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {}
     }
