@@ -13,6 +13,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.solace_temp.data.AppRepository
+import com.example.solace_temp.data.WaitingListErrorCallback
 import com.example.solace_temp.models.*
 import com.example.solace_temp.ui.screens.LotteryDetailsScreen
 import com.example.solace_temp.ui.screens.getLotteryStatus
@@ -114,8 +115,8 @@ class LotterySystemAndRedrawTest {
         override fun createCampsite(campsite: Campsite): Campsite = campsite
         override fun createLottery(lottery: Lottery): Lottery = lottery
 
-        override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit) {
-            onResult(null)
+        override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) {
+            onResult.onResult(null)
         }
 
         override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
@@ -189,7 +190,9 @@ class LotterySystemAndRedrawTest {
         }
 
         composeTestRule.onAllNodesWithText("Upcoming Lottery").onFirst().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Lottery opening in:").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Lottery opening in:")
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test
@@ -206,7 +209,9 @@ class LotterySystemAndRedrawTest {
         }
 
         composeTestRule.onAllNodesWithText("Active Lottery").onFirst().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Lottery drawing in:").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Lottery drawing in:")
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test
@@ -224,9 +229,13 @@ class LotterySystemAndRedrawTest {
 
         composeTestRule.onAllNodesWithText("Booking Lottery").onFirst().assertIsDisplayed()
         // Check reserved count display
-        composeTestRule.onNodeWithText("People who have reserved: 1").assertIsDisplayed()
+        composeTestRule.onNodeWithText("People who have reserved: 1")
+            .performScrollTo()
+            .assertIsDisplayed()
         // Check Redraw button
-        composeTestRule.onNodeWithText("Redraw").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Redraw").performClick()
+        composeTestRule.onNodeWithText("Redraw")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
     }
 }

@@ -3,7 +3,9 @@ package com.example.solace_temp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.*
 import com.example.solace_temp.data.MockAppRepository
+import com.example.solace_temp.models.UserRole
 import com.example.solace_temp.ui.screens.AdminCampsitesScreen
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 
@@ -12,10 +14,16 @@ class AdminCampsitesScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
+    @After
+    fun restoreRole() {
+        MockAppRepository.switchRole(UserRole.ENTRANT)
+    }
+
     @Test
     fun adminCampsitesScreen_deniesAccessToNonAdmins() {
         // Setup mock repo with an ENTRANT profile (isAdmin = false)
-        val mockRepo = MockAppRepository // Ensure currentProfile is set to Entrant
+        val mockRepo = MockAppRepository
+        mockRepo.switchRole(UserRole.ENTRANT)
 
         composeTestRule.setContent {
             AdminCampsitesScreen(repository = mockRepo, onSelectCampsite = {})
@@ -29,7 +37,8 @@ class AdminCampsitesScreenTest {
     @Test
     fun adminCampsitesScreen_displaysAndFiltersCampsites() {
         // Setup mock repo with an ADMIN profile
-        val mockRepo = MockAppRepository // Ensure currentProfile is set to Admin
+        val mockRepo = MockAppRepository
+        mockRepo.switchRole(UserRole.ADMIN)
 
         composeTestRule.setContent {
             AdminCampsitesScreen(repository = mockRepo, onSelectCampsite = {})

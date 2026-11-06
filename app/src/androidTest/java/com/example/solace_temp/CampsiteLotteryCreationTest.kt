@@ -10,6 +10,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.solace_temp.data.AppRepository
+import com.example.solace_temp.data.WaitingListErrorCallback
 import com.example.solace_temp.models.*
 import com.example.solace_temp.ui.screens.CreateLotteryDialog
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,8 +31,6 @@ class CampsiteLotteryCreationTest {
     class LotteryFakeRepository : AppRepository {
         val _currentProfile = MutableStateFlow(Profile(deviceId = "owner-lottery-test", role = UserRole.CAMPSITE_OWNER))
         override val currentProfile: StateFlow<Profile> = _currentProfile
-        override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
-
         override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
         val _campsites = MutableStateFlow(listOf(
@@ -64,8 +63,8 @@ class CampsiteLotteryCreationTest {
             _lotteries.value = _lotteries.value + saved
             return saved
         }
-        override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit) {
-            onResult(null)
+        override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) {
+            onResult.onResult(null)
         }
         override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
         override fun drawLotteryWinners(lotteryId: String) {}
