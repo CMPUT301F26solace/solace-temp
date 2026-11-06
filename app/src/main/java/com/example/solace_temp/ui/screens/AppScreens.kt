@@ -190,9 +190,8 @@ fun getLotteryStatus(lottery: Lottery?, campsite: Campsite? = null): String {
     return when {
         now < regStart -> "Upcoming"
         now in regStart..regEnd -> "Active"
-        now > regEnd && now <= bookingEnd -> "Booking"
         now > bookingEnd -> "Finished"
-        else -> "N/A"
+        else -> "Booking"
     }
 }
 
@@ -1709,31 +1708,172 @@ fun LotteryDetailsScreen(
                     }
                 }
 
-                // Placeholder card for future lottery draw controls and management features
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                // Lottery Drawing System & Controls (Replaces Lottery Sampling & Draw Controls)
+                LotteryDrawingControlSection(
+                    lottery = lottery,
+                    repository = repository,
+                    associatedCampsites = associatedCampsites
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LotteryDrawingControlSection(
+    lottery: Lottery,
+    repository: AppRepository,
+    associatedCampsites: List<Campsite>
+) {
+    val reservations by repository.reservations.collectAsState()
+    val lotteryStatus = getLotteryStatus(lottery, associatedCampsites.firstOrNull())
+    val now = System.currentTimeMillis()
+
+    val regEnd = lottery.registrationEndMillis ?: 0L
+    LaunchedEffect(lottery.id, lotteryStatus, regEnd) {
+        if (lotteryStatus == "Booking" && !lottery.isDrawn && regEnd > 0L && now >= regEnd) {
+            repository.drawLotteryWinners(lottery.id)
+        }
+    }
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = "Lottery Drawing & Management",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            when (lotteryStatus) {
+                "Upcoming" -> {
+                    val startMillis = lottery.registrationStartMillis ?: (now + 86400000L)
+                    LotteryCountdownTimer(targetMillis = startMillis, label = "Lottery opening in:")
+                }
+                "Active" -> {
+                    val endMillis = lottery.registrationEndMillis ?: (now + 86400000L)
+                    LotteryCountdownTimer(targetMillis = endMillis, label = "Lottery drawing in:")
+                }
+                "Booking" -> {
+                    val reservedCount = reservations.count { res ->
+                        res.campsiteId in lottery.campsiteIds && res.status == ReservationStatus.ACTIVE
+                    }
+                    Text(
+                        text = "People who have reserved: $reservedCount",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Button(
+                        onClick = { repository.redrawLottery(lottery.id) },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            "Lottery Sampling & Draw Controls",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Advanced sampling algorithms, winner draw triggers, and notification management will appear here in future updates.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
+                        Text("Redraw")
                     }
                 }
+                "Finished" -> {
+                    val confirmedReservations = reservations.filter { res ->
+                        res.campsiteId in lottery.campsiteIds && res.status == ReservationStatus.ACTIVE
+                    }
+                    Text(
+                        text = "Finished Lottery Results & Reservations (${confirmedReservations.size})",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (confirmedReservations.isEmpty() && lottery.invitedWinnerIds.isEmpty()) {
+                        Text(
+                            text = "No winner reservations were completed. Sad outcome! 😢",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            confirmedReservations.forEach { res ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Text("Winner / Entrant: ${res.entrantId}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                        Text("Reserved Dates: ${res.bookedDates.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF2E7D32))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    Text(
+                        text = "Status evaluation N/A",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+fun LotteryCountdownTimer(
+    targetMillis: Long,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    var timeLeft by remember { mutableStateOf(targetMillis - System.currentTimeMillis()) }
+
+    LaunchedEffect(targetMillis) {
+        while (true) {
+            timeLeft = targetMillis - System.currentTimeMillis()
+            delay(1000L)
+        }
+    }
+
+    val displayTime = if (timeLeft <= 0) {
+        "00:00:00 (Expired / Ready)"
+    } else {
+        val seconds = (timeLeft / 1000) % 60
+        val minutes = (timeLeft / (1000 * 60)) % 60
+        val hours = (timeLeft / (1000 * 60 * 60)) % 24
+        val days = timeLeft / (1000 * 60 * 60 * 24)
+        if (days > 0) {
+            String.format(Locale.getDefault(), "%d days, %02d:%02d:%02d", days, hours, minutes, seconds)
+        } else {
+            String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds)
+        }
+    }
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+                text = displayTime,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
