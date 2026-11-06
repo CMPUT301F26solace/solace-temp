@@ -38,6 +38,13 @@ class LotterySystemAndRedrawTest {
         private val _currentProfile = MutableStateFlow(Profile(deviceId = "test-user-id", role = UserRole.CAMPSITE_OWNER))
         override val currentProfile: StateFlow<Profile> = _currentProfile
 
+        override suspend fun declineLotteryInvitation(
+            notificationId: String,
+            campsiteId: String
+        ) {
+            // Not used in these tests.
+        }
+
         override val profiles: StateFlow<List<Profile>> = MutableStateFlow(listOf(
             Profile(deviceId = "user-1", name = "Entrant One"),
             Profile(deviceId = "user-2", name = "Entrant Two"),
