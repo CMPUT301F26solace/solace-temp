@@ -15,6 +15,8 @@ import android.content.Context
 import android.provider.Settings
 import android.util.Log
 import com.example.solace_temp.models.*
+import com.example.solace_temp.validation.WaitingListException
+import com.example.solace_temp.validation.WaitingListRules
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -182,6 +184,28 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         _currentProfile.value = profile
         db.collection("profiles").document(deviceId).set(profile)
     }
+    /**
+     * Saves the profile and reports Firestore's write result.
+     *
+     * @param profile The updated profile.
+     * @param onResult Receives success or failure when saving finishes.
+     */
+    override fun updateProfile(
+        profile: Profile,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        db.collection("profiles")
+            .document(deviceId)
+            .set(profile)
+            .addOnSuccessListener {
+                _currentProfile.value = profile
+                onResult(Result.success(Unit))
+            }
+            .addOnFailureListener { error ->
+                Log.e("FirestoreRepo", "Profile update failed", error)
+                onResult(Result.failure(error))
+            }
+    }
 
     /** Creates a new campsite in Firestore. */
     override fun createCampsite(campsite: Campsite): Campsite {
@@ -237,6 +261,92 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     override fun leaveWaitingList(lotteryId: String, entrantId: String) {
         db.collection("lotteries").document(lotteryId)
             .update("waitingListEntrantIds", FieldValue.arrayRemove(entrantId))
+    }
+    /** Atomically checks dates, duplicates and capacity before joining (US 01.02.01). */
+    override fun joinWaitingList(
+        lotteryId: String,
+        entrantId: String,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        updateWaitingList(
+            lotteryId,
+            entrantId,
+            joining = true,
+            onResult = onResult
+        )
+    }
+
+    /** Removes this device's entry and reports the committed result (US 01.02.02). */
+    override fun leaveWaitingList(
+        lotteryId: String,
+        entrantId: String,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        updateWaitingList(
+            lotteryId,
+            entrantId,
+            joining = false,
+            onResult = onResult
+        )
+    }
+
+    private fun updateWaitingList(
+        lotteryId: String,
+        entrantId: String,
+        joining: Boolean,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        if (entrantId != deviceId || entrantId.isBlank()) {
+            onResult(
+                Result.failure(
+                    WaitingListException(
+                        "Your device profile is unavailable. Please reopen the app."
+                    )
+                )
+            )
+            return
+        }
+
+        if (lotteryId.isBlank() || '/' in lotteryId) {
+            onResult(
+                Result.failure(
+                    WaitingListException("This lottery is no longer available.")
+                )
+            )
+            return
+        }
+
+        val reference = db.collection("lotteries").document(lotteryId)
+
+        db.runTransaction { transaction ->
+            // Read the latest document on every retry, before any write.
+            val snapshot = transaction.get(reference)
+            val lottery = snapshot.toObject(Lottery::class.java)
+
+            val error = if (joining) {
+                WaitingListRules.joinError(lottery, entrantId)
+            } else {
+                WaitingListRules.leaveError(lottery, entrantId)
+            }
+
+            if (error != null) throw WaitingListException(error)
+
+            val entrants = requireNotNull(lottery).waitingListEntrantIds
+
+            val updated = if (joining) {
+                (entrants + entrantId).distinct()
+            } else {
+                entrants - entrantId
+            }
+
+            transaction.update(reference, "waitingListEntrantIds", updated)
+            null
+        }.addOnSuccessListener {
+            onResult(Result.success(Unit))
+        }.addOnFailureListener { error ->
+            Log.e("FirestoreRepo", "Waiting list update failed", error)
+            onResult(Result.failure(error))
+        }
     }
 
     /** Performs a random draw for the specified lottery and updates Firestore with winners. */

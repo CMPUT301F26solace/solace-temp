@@ -63,6 +63,8 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.platform.testTag
+import com.example.solace_temp.validation.ProfileValidator
 import kotlinx.coroutines.delay
 
 // =========================================================================
@@ -239,8 +241,16 @@ fun CampsiteDetailsScreen(
     val qrBitmap = remember(campsite.qrCodePayload) {
         QrCodeGeneratorUtil.generateQrBitmap(campsite.qrCodePayload)
     }
-    val activeLottery = lotteries.find { it.campsiteIds.contains(campsite.id) && getLotteryStatus(it, campsite) != "Finished" && getLotteryStatus(it, campsite) != "N/A" }
-    val isInWaitlist = activeLottery?.waitingListEntrantIds?.contains(profile.deviceId) == true
+    val activeLottery = lotteries.find {
+        it.campsiteIds.contains(campsite.id) &&
+                if (profile.role == UserRole.ENTRANT) {
+                    com.example.solace_temp.validation.WaitingListRules
+                        .entryError(it) == null
+                } else {
+                    getLotteryStatus(it, campsite) != "Finished" &&
+                            getLotteryStatus(it, campsite) != "N/A"
+                }
+    }
 
     Scaffold(
         topBar = {
@@ -378,7 +388,13 @@ fun CampsiteDetailsScreen(
                             Column(Modifier.padding(12.dp)) {
                                 if (activeLottery != null) {
                                     Text("Name: ${activeLottery.name}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                    val status = getLotteryStatus(activeLottery, campsite)
+                                    val status = if (
+                                        profile.role == UserRole.ENTRANT
+                                    ) {
+                                        "Accepting waiting-list entries"
+                                    } else {
+                                        getLotteryStatus(activeLottery, campsite)
+                                    }
                                     Text("Status: $status", style = MaterialTheme.typography.bodySmall, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
                                     Text(
                                         "Registration Window: ${activeLottery.registrationStart.ifBlank { formatDateMillis(activeLottery.registrationStartMillis) }} to ${activeLottery.registrationEnd.ifBlank { formatDateMillis(activeLottery.registrationEndMillis) }}",
@@ -457,48 +473,12 @@ fun CampsiteDetailsScreen(
                         DateRangePicker(state = dateState, modifier = Modifier.weight(1f))
                     }
                 }
-                
-                if (activeLottery != null) {
-                    val lotteryStatus = getLotteryStatus(activeLottery, campsite)
-                    val isRegistrationOpen = lotteryStatus == "Active"
 
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            val now = System.currentTimeMillis()
-                            val regStart = activeLottery.registrationStartMillis ?: 0L
-                            val regEnd = activeLottery.registrationEndMillis ?: Long.MAX_VALUE
-                            if (now < regStart) {
-                                entrantFeedback = "Error: Registration has not opened yet. Opens on ${activeLottery.registrationStart.ifBlank { formatDateMillis(regStart) }}."
-                            } else if (now > regEnd) {
-                                entrantFeedback = "Error: Registration period has closed."
-                            } else {
-                                repository.joinWaitingList(activeLottery.id, profile.deviceId) { error ->
-                                    entrantFeedback = error?.let { "Error: $it" }
-                                        ?: "Successfully joined waiting list!"
-                                }
-                            }
-                        },
-                        enabled = isRegistrationOpen && !isInWaitlist,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE11D48)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (isInWaitlist) "Already on Waiting List" else "+ Join Waiting List")
-                    }
-
-                    if (!isInWaitlist && activeLottery.waitlistCapacity != null &&
-                        activeLottery.waitingListEntrantIds.size >= activeLottery.waitlistCapacity) {
-                        Text("Waitlist is full.", color = MaterialTheme.colorScheme.error)
-                    }
-
-                    OutlinedButton(
-                        onClick = { repository.leaveWaitingList(activeLottery.id, profile.deviceId) },
-                        enabled = isInWaitlist,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Leave Waiting List")
-                    }
-                }
+                // US 01.01.06, US 01.02.01 and US 01.02.02.
+                LotteryWaitingListSection(
+                    campsiteId = campsite.id,
+                    repository = repository
+                )
             }
 
             // CAMPSITE OWNER QR CODE & MANAGEMENT SECTION
@@ -1131,10 +1111,28 @@ fun CreateCampsiteScreen(
 @Composable
 fun ProfileAndRoleScreen(repository: AppRepository) {
     val profile by repository.currentProfile.collectAsState()
-    var name by remember(profile.name) { mutableStateOf(profile.name) }
-    var email by remember(profile.email) { mutableStateOf(profile.email) }
-    var phone by remember(profile.phone) { mutableStateOf(profile.phone) }
-    var receiveNotifs by remember(profile.receiveNotifications) { mutableStateOf(profile.receiveNotifications) }
+
+    var name by remember(profile.name) {
+        mutableStateOf(profile.name)
+    }
+    var email by remember(profile.email) {
+        mutableStateOf(profile.email)
+    }
+    var phone by remember(profile.phone) {
+        mutableStateOf(profile.phone)
+    }
+    var receiveNotifs by remember(profile.receiveNotifications) {
+        mutableStateOf(profile.receiveNotifications)
+    }
+
+    var showErrors by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
+    var saveFeedback by remember { mutableStateOf<String?>(null) }
+    var saveFailed by remember { mutableStateOf(false) }
+
+    val nameError = ProfileValidator.nameError(name)
+    val emailError = ProfileValidator.emailError(email)
+    val phoneError = ProfileValidator.phoneError(phone)
 
     Column(
         modifier = Modifier
@@ -1144,7 +1142,11 @@ fun ProfileAndRoleScreen(repository: AppRepository) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Your Profile", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Your Profile",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
 
         // Acceptance Criteria: Admin can navigate between views within the same profile[cite: 15]
         if (profile.isAdmin) {
@@ -1176,10 +1178,69 @@ fun ProfileAndRoleScreen(repository: AppRepository) {
             colors = CardDefaults.cardColors(containerColor = Color.White),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Phone (Optional)") }, modifier = Modifier.fillMaxWidth())
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        saveFeedback = null
+                    },
+                    label = { Text("Name") },
+                    enabled = !isSaving,
+                    singleLine = true,
+                    isError = showErrors && nameError != null,
+                    supportingText = {
+                        if (showErrors && nameError != null) {
+                            Text(nameError)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_name")
+                )
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        saveFeedback = null
+                    },
+                    label = { Text("Email") },
+                    enabled = !isSaving,
+                    singleLine = true,
+                    isError = showErrors && emailError != null,
+                    supportingText = {
+                        if (showErrors && emailError != null) {
+                            Text(emailError)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_email")
+                )
+
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = {
+                        phone = it
+                        saveFeedback = null
+                    },
+                    label = { Text("Phone (Optional)") },
+                    enabled = !isSaving,
+                    singleLine = true,
+                    isError = showErrors && phoneError != null,
+                    supportingText = {
+                        if (showErrors && phoneError != null) {
+                            Text(phoneError)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_phone")
+                )
 
                 Row(
                     Modifier.fillMaxWidth(),
@@ -1187,19 +1248,72 @@ fun ProfileAndRoleScreen(repository: AppRepository) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Receive Notifications")
-                    Switch(checked = receiveNotifs, onCheckedChange = { receiveNotifs = it })
+                    Switch(
+                        checked = receiveNotifs,
+                        onCheckedChange = { receiveNotifs = it }
+                    )
                 }
 
                 Button(
                     onClick = {
-                        repository.updateProfile(
-                            profile.copy(name = name, email = email, phone = phone, receiveNotifications = receiveNotifs)
-                        )
+                        showErrors = true
+                        saveFeedback = null
+
+                        if (
+                            !isSaving &&
+                            nameError == null &&
+                            emailError == null &&
+                            phoneError == null
+                        ) {
+                            isSaving = true
+
+                            val updatedProfile = profile.copy(
+                                name = name.trim(),
+                                email = email.trim(),
+                                phone = phone.trim(),
+                                receiveNotifications = receiveNotifs
+                            )
+
+                            repository.updateProfile(
+                                profile = updatedProfile,
+                                onResult = { result ->
+                                    isSaving = false
+                                    saveFailed = result.isFailure
+
+                                    if (result.isSuccess) {
+                                        showErrors = false
+                                        saveFeedback = "Profile updated."
+                                    } else {
+                                        saveFeedback =
+                                            "Could not save your profile. Please try again."
+                                    }
+                                }
+                            )
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE11D48)),
-                    modifier = Modifier.fillMaxWidth()
+                    enabled = !isSaving,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE11D48)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_save")
                 ) {
-                    Text("Save Changes")
+                    Text(
+                        if (isSaving) "Saving..." else "Save Changes"
+                    )
+                }
+
+                saveFeedback?.let { message ->
+                    Text(
+                        text = message,
+                        color = if (saveFailed) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                        modifier = Modifier.testTag("profile_save_feedback")
+                    )
                 }
 
                 Text(
