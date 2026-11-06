@@ -109,7 +109,13 @@ sealed class AppScreen(val route: String) {
         fun createRoute(campsiteId: String, notificationId: String) =
             "campsite_reservation/$campsiteId/$notificationId"
     }
+
+    /**
+     * Destination route for viewing active entrant reservations
+     */
+    object EntrantReservations : AppScreen("entrant_reservations")
 }
+
 
 /**
  * Utility object for generating and sharing QR codes.

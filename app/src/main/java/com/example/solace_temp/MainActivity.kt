@@ -262,6 +262,12 @@ fun SolaceCampsiteApp() {
                     )
                 }
 
+                composable(AppScreen.EntrantReservations.route) {
+                    EntrantReservationsScreen(
+                        repository = repository
+                    )
+                }
+
                 // CAMPSITE OWNER ROUTES
                 composable(BottomNavItem.OwnerCampsites.route) {
                     OwnerCampsitesScreen(
