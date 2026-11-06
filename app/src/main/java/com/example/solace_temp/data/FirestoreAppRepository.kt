@@ -22,6 +22,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 /**
@@ -454,6 +455,24 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     /** Removes a specific campsite from Firestore. */
     override fun removeCampsiteAsAdmin(campsiteId: String) {
         db.collection("campsites").document(campsiteId).delete()
+    }
+
+    override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {
+        if (deviceId.isBlank()) return
+        try {
+            db.collection("notifications").document(notificationId).delete()
+            val query = db.collection("lotteries")
+                .whereArrayContains("campsiteIds", campsiteId)
+                .get()
+                .await()
+            for (doc in query.documents) {
+                val lot = doc.toObject(Lottery::class.java) ?: continue
+                val updatedWinners = lot.invitedWinnerIds.filterNot { it == deviceId }
+                db.collection("lotteries").document(doc.id).update("invitedWinnerIds", updatedWinners)
+            }
+        } catch (e: Exception) {
+            Log.e("FirestoreRepo", "Error declining invitation", e)
+        }
     }
 
     /** Seeds initial dummy data into Firestore if collections are empty. */

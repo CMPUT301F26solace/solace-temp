@@ -187,6 +187,11 @@ interface AppRepository {
      * @param campsiteId The unique ID of the campsite to remove.
      */
     fun removeCampsiteAsAdmin(campsiteId: String)
+
+    /**
+     * Declines a lottery invitation for an entrant and updates notification state.
+     */
+    suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String)
 }
 
 /**
@@ -295,6 +300,7 @@ object MockAppRepository : AppRepository {
     
     /** Exposes the mock notifications state. */
     override val notifications: StateFlow<List<AppNotification>> = _notifications.asStateFlow()
+
 
     /** Switches the user's role in the mock profile state. */
     override fun switchRole(newRole: UserRole) {
@@ -427,5 +433,20 @@ object MockAppRepository : AppRepository {
     /** Simulates removing a campsite in the mock state. */
     override fun removeCampsiteAsAdmin(campsiteId: String) {
         _campsites.update { list -> list.filterNot { it.id == campsiteId } }
+    }
+
+    override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {
+        val currentDeviceId = _currentProfile.value.deviceId
+        _notifications.update { list -> list.filterNot { it.id == notificationId } }
+        _lotteries.update { list ->
+            list.map { lot ->
+                if (campsiteId in lot.campsiteIds) {
+                    lot.copy(invitedWinnerIds = lot.invitedWinnerIds.filterNot { it == currentDeviceId })
+                } else lot
+            }
+        }
+    }
+    fun updateNotifications(newList: List<AppNotification>) {
+        _notifications.value = newList
     }
 }

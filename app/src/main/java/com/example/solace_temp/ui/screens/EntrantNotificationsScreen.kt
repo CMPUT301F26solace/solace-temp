@@ -27,7 +27,7 @@ import com.example.solace_temp.models.AppNotification
 fun EntrantNotificationsScreen(
     repository: AppRepository,
     onAcceptReservation: (campsiteId: String, notificationId: String) -> Unit,
-    onDeclineReservation: (notificationId: String) -> Unit
+    onDeclineReservation: (notificationId: String, campsiteId: String) -> Unit
 ) {
     val profile by repository.currentProfile.collectAsState()
     val notifications by repository.notifications.collectAsState()
@@ -66,7 +66,7 @@ fun EntrantNotificationsScreen(
                     NotificationCard(
                         notification = item,
                         onAccept = { onAcceptReservation(item.campsiteId, item.id) },
-                        onDecline = { onDeclineReservation(item.id) }
+                        onDecline = { onDeclineReservation(item.id, item.campsiteId) }
                     )
                 }
             }

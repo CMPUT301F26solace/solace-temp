@@ -45,6 +45,7 @@ class OwnerCampsitesScreenTest {
         override fun drawLotteryWinners(lotteryId: String) {}
         override fun redrawLottery(lotteryId: String) {}
         override fun removeCampsiteAsAdmin(campsiteId: String) {}
+        override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {}
     }
 
     @Test

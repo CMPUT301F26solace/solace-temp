@@ -50,6 +50,8 @@ import com.example.solace_temp.ui.screens.*
 import com.example.solace_temp.ui.theme.Solace_tempTheme
 import kotlinx.coroutines.delay
 import com.example.solace_temp.ui.screens.EntrantNotificationsScreen
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 /**
  * Main entry point of the Solace application.
@@ -194,12 +196,16 @@ fun SolaceCampsiteApp() {
 
                 // Lottery Notifications & Invitations
                 composable(BottomNavItem.EntrantNotifications.route) {
+                    val scope = rememberCoroutineScope()
                     EntrantNotificationsScreen(
                         repository = repository,
                         onAcceptReservation = { campsiteId, _ ->
                             navController.navigate("campsite_details/$campsiteId")
                         },
-                        onDeclineReservation = { _ -> // will connect decline logic to repository
+                        onDeclineReservation = { notificationId, campsiteId ->
+                            scope.launch {
+                                repository.declineLotteryInvitation(notificationId, campsiteId)
+                            }
                         }
                     )
                 }
