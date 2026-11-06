@@ -1,0 +1,38 @@
+package com.example.solace_temp
+
+import com.example.solace_temp.data.MockAppRepository
+import com.example.solace_temp.models.Lottery
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class OwnerWaitlistTest {
+    @Test
+    fun rejectsEntryWhenWaitlistIsFull() {
+        val lottery = MockAppRepository.createLottery(
+            Lottery(maxWinners = 1, waitlistCapacity = 1,
+                waitingListEntrantIds = listOf("already-on-list"))
+        )
+        var error: String? = null
+        MockAppRepository.joinWaitingList(lottery.id, "new-entrant") { error = it }
+        assertEquals("Waitlist is full.", error)
+        assertFalse(MockAppRepository.lotteries.value
+            .first { it.id == lottery.id }.waitingListEntrantIds.contains("new-entrant"))
+    }
+
+    @Test
+    fun recordsEntryTimeWhenEntrantJoins() {
+        val lottery = MockAppRepository.createLottery(
+            Lottery(maxWinners = 1, waitlistCapacity = 2)
+        )
+        var error: String? = "unsubmitted"
+        MockAppRepository.joinWaitingList(lottery.id, "test-entrant") { error = it }
+        assertNull(error)
+        val saved = MockAppRepository.lotteries.value.first { it.id == lottery.id }
+        assertTrue("test-entrant" in saved.waitingListEntrantIds)
+        assertNotNull(saved.waitlistJoinedAtMillis["test-entrant"])
+    }
+}
