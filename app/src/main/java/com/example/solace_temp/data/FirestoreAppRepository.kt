@@ -352,11 +352,28 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     /** Performs a random draw for the specified lottery and updates Firestore with winners. */
     override fun drawLotteryWinners(lotteryId: String) {
         val lottery = _lotteries.value.find { it.id == lotteryId } ?: return
-        val winners = lottery.waitingListEntrantIds.shuffled().take(lottery.maxWinners)
+        val count = minOf(lottery.waitingListEntrantIds.size, lottery.maxWinners)
+        val winners = lottery.waitingListEntrantIds.shuffled().take(count)
 
         db.collection("lotteries").document(lotteryId).update(
             mapOf(
                 "invitedWinnerIds" to winners,
+                "isDrawn" to true
+            )
+        )
+    }
+
+    /** Redraws or picks backup winners from remaining waitlist in Firestore. */
+    override fun redrawLottery(lotteryId: String) {
+        val lottery = _lotteries.value.find { it.id == lotteryId } ?: return
+        val remaining = lottery.waitingListEntrantIds.filter { id -> id !in lottery.invitedWinnerIds }
+        val needed = lottery.maxWinners - lottery.invitedWinnerIds.size
+        val newWinners = remaining.shuffled().take(needed)
+        val updatedWinners = lottery.invitedWinnerIds + newWinners
+
+        db.collection("lotteries").document(lotteryId).update(
+            mapOf(
+                "invitedWinnerIds" to updatedWinners,
                 "isDrawn" to true
             )
         )
