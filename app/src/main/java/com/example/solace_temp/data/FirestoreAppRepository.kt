@@ -475,6 +475,32 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         }
     }
 
+    override suspend fun createReservation(
+        campsiteId: String,
+        notificationId: String,
+        startDate: String,
+        endDate: String
+    ): Boolean {
+        if (deviceId.isBlank()) return false
+        return try {
+            val reservationData = hashMapOf(
+                "reservationId" to UUID.randomUUID().toString(),
+                "campsiteId" to campsiteId,
+                "entrantId" to deviceId,
+                "startDate" to startDate,
+                "endDate" to endDate,
+                "status" to "CONFIRMED",
+                "createdAt" to System.currentTimeMillis()
+            )
+            db.collection("reservations").add(reservationData).await()
+            db.collection("notifications").document(notificationId).delete().await()
+            true
+        } catch (e: Exception) {
+            Log.e("FirestoreRepo", "Error creating reservation", e)
+            false
+        }
+    }
+
     /** Seeds initial dummy data into Firestore if collections are empty. */
     private fun seedInitialDataIfNeeded() {
         MockAppRepository.campsites.value.forEach { sampleSite ->

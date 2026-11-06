@@ -52,6 +52,8 @@ import kotlinx.coroutines.delay
 import com.example.solace_temp.ui.screens.EntrantNotificationsScreen
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 
 /**
  * Main entry point of the Solace application.
@@ -92,6 +94,7 @@ fun SolaceCampsiteApp() {
     val profile by repository.currentProfile.collectAsState()
     val navController = rememberNavController()
     val navItems = getBottomNavItemsForRole(profile.role)
+    val scope = rememberCoroutineScope()
 
     // Automatically jump to the first tab of the new role when switching roles
     LaunchedEffect(profile.role) {
@@ -207,6 +210,60 @@ fun SolaceCampsiteApp() {
                                 repository.declineLotteryInvitation(notificationId, campsiteId)
                             }
                         }
+                    )
+                }
+
+                // Entrant Notifications Destination
+                composable(AppScreen.EntrantNotifications.route) {
+                    EntrantNotificationsScreen(
+                        repository = repository,
+                        onAcceptReservation = { campsiteId, notificationId ->
+                            navController.navigate(AppScreen.CampsiteReservation.createRoute(campsiteId, notificationId))
+                        },
+                        onDeclineReservation = { notificationId, campsiteId ->
+                            scope.launch {
+                                repository.declineLotteryInvitation(notificationId, campsiteId)
+                            }
+                        }
+                    )
+                }
+
+                // Campsite Reservation Destination
+                composable(
+                    route = AppScreen.CampsiteReservation.route,
+                    arguments = listOf(
+                        navArgument("campsiteId") { type = NavType.StringType },
+                        navArgument("notificationId") { type = NavType.StringType }
+                    )
+                ) { backStackEntry ->
+                    val campsiteId = backStackEntry.arguments?.getString("campsiteId") ?: ""
+                    val notificationId = backStackEntry.arguments?.getString("notificationId") ?: ""
+
+                    CampsiteReservationScreen(
+                        campsiteId = campsiteId,
+                        notificationId = notificationId,
+                        onReservationConfirmed = {
+                            scope.launch {
+                                val success = repository.createReservation(
+                                    campsiteId = campsiteId,
+                                    notificationId = notificationId,
+                                    startDate = "2026-07-01",
+                                    endDate = "2026-07-07"
+                                )
+                                if (success) {
+                                    navController.popBackStack()
+                                }
+                            }
+                        },
+                        onBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+
+                composable(AppScreen.EntrantReservations.route) {
+                    EntrantReservationsScreen(
+                        repository = repository
                     )
                 }
 

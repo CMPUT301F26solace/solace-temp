@@ -95,6 +95,31 @@ import kotlinx.coroutines.delay
 // =========================================================================
 
 /**
+ * AppScreen
+ *
+ * Represents the sealed hierarchy of navigation destinations within the app,
+ * containing route patterns and route-building helper functions.
+ */
+sealed class AppScreen(val route: String) {
+    object EntrantNotifications : AppScreen("entrant_notifications")
+    object OwnerWaitlist : AppScreen("owner_waitlist")
+
+    /**
+     * Route destination for winning entrants to select dates and complete booking.
+     */
+    object CampsiteReservation : AppScreen("campsite_reservation/{campsiteId}/{notificationId}") {
+        fun createRoute(campsiteId: String, notificationId: String) =
+            "campsite_reservation/$campsiteId/$notificationId"
+    }
+
+    /**
+     * Destination route for viewing active entrant reservations
+     */
+    object EntrantReservations : AppScreen("entrant_reservations")
+}
+
+
+/**
  * Utility object for generating and sharing QR codes.
  */
 object QrCodeGeneratorUtil {
