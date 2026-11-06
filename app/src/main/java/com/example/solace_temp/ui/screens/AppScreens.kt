@@ -1936,6 +1936,20 @@ fun TeammatePlaceholderScreen(title: String, userStoriesCovered: String) {
         }
     }
 }
+
+/**
+ * Displays the administrator registry view for browsing all platform campsites.
+ *
+ * This screen enforces role-based access control, ensuring only verified administrators
+ * can access the directory. It provides robust data management capabilities including
+ * text-based search (by name, location, or owner ID), multi-criteria filtering
+ * (by status, active lottery association, and creation date range via a dialog picker),
+ * and chronological sorting. The UI utilizes virtual scrolling to efficiently handle
+ * large datasets and provides explicit visual feedback for empty or unmatched search states.
+ *
+ * @param repository The data repository providing state flows for campsites, lotteries, and the current user profile.
+ * @param onSelectCampsite Callback triggered with the target campsite's ID when an admin taps a card for moderation or review.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminCampsitesScreen(
@@ -2118,13 +2132,17 @@ fun AdminCampsitesScreen(
     }
 }
 
+/**
+ * Displays the administrator directory for browsing all registered profiles.
+ * Implements search, role-based filtering, and date sorting with virtual scrolling
+ * to handle high data volumes gracefully.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminProfilesScreen(
     repository: AppRepository,
     onSelectProfile: (String) -> Unit
 ) {
-    // Note: Ensure your AppRepository exposes 'profiles' similar to 'campsites'
     val profilesList by repository.profiles.collectAsState(initial = emptyList())
     val currentProfile by repository.currentProfile.collectAsState()
 
@@ -2145,7 +2163,7 @@ fun AdminProfilesScreen(
         return
     }
 
-    // Apply Search, Filter, and Sort criteria[cite: 12]
+    // Apply Search, Filter, and Sort criteria
     val filteredAndSorted = profilesList.filter { user ->
         val matchesSearch = user.name.contains(searchQuery, ignoreCase = true) ||
                 user.email.contains(searchQuery, ignoreCase = true) ||
@@ -2168,7 +2186,7 @@ fun AdminProfilesScreen(
         Text("Admin: User Directory", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
 
-        // Search by name, email, or user identifier[cite: 12]
+        // Search by name, email, or user identifier
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
@@ -2179,7 +2197,7 @@ fun AdminProfilesScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // Filter options for role, status, and creation date[cite: 12]
+        // Filter options for role, status, and creation date
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2234,7 +2252,7 @@ fun AdminProfilesScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        // Empty state feedback[cite: 12]
+        // Empty state feedback for no matches
         if (filteredAndSorted.isEmpty()) {
             Text(
                 text = if (searchQuery.isBlank() && selectedRoleFilter == null && selectedStatusFilter == null && dateFilterStart == null)
@@ -2245,7 +2263,7 @@ fun AdminProfilesScreen(
             )
         }
 
-        // Virtual scrolling for large user bases[cite: 12]
+        // Virtual scrolling for large user bases
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(filteredAndSorted) { user ->
                 Card(
@@ -2276,7 +2294,7 @@ fun AdminProfilesScreen(
         }
     }
 
-    // Date Range Picker Dialog for filtering by creation date[cite: 12]
+    // Date Range Picker Dialog for filtering by creation date
     if (showDateFilterDialog) {
         val dateState = rememberDateRangePickerState(
             initialSelectedStartDateMillis = dateFilterStart,
