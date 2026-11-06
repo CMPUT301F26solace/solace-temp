@@ -87,6 +87,12 @@ interface AppRepository {
      * @param lotteryId The unique ID of the lottery to draw winners for.
      */
     fun drawLotteryWinners(lotteryId: String)
+
+    /**
+     * Redraws or picks backup winners for a specific lottery.
+     * @param lotteryId The unique ID of the lottery.
+     */
+    fun redrawLottery(lotteryId: String)
     
     /**
      * Deletes a campsite from the platform. Requires Admin privileges.
@@ -271,8 +277,23 @@ object MockAppRepository : AppRepository {
         _lotteries.update { list ->
             list.map {
                 if (it.id == lotteryId) {
-                    val winners = it.waitingListEntrantIds.shuffled().take(it.maxWinners)
+                    val count = minOf(it.waitingListEntrantIds.size, it.maxWinners)
+                    val winners = it.waitingListEntrantIds.shuffled().take(count)
                     it.copy(invitedWinnerIds = winners, isDrawn = true)
+                } else it
+            }
+        }
+    }
+
+    /** Simulates redrawing winners from backup or remaining waitlist for a mock lottery. */
+    override fun redrawLottery(lotteryId: String) {
+        _lotteries.update { list ->
+            list.map {
+                if (it.id == lotteryId) {
+                    val remaining = it.waitingListEntrantIds.filter { id -> id !in it.invitedWinnerIds }
+                    val needed = it.maxWinners - it.invitedWinnerIds.size
+                    val newWinners = remaining.shuffled().take(needed)
+                    it.copy(invitedWinnerIds = it.invitedWinnerIds + newWinners, isDrawn = true)
                 } else it
             }
         }
