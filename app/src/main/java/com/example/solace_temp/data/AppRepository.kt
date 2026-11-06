@@ -98,6 +98,13 @@ interface AppRepository {
      * Declines a lottery invitation for an entrant and updates notification state.
      */
     suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String)
+
+    suspend fun createReservation(
+        campsiteId: String,
+        notificationId: String,
+        startDate: String,
+        endDate: String
+    ): Boolean
 }
 
 /**
@@ -302,5 +309,16 @@ object MockAppRepository : AppRepository {
     }
     fun updateNotifications(newList: List<AppNotification>) {
         _notifications.value = newList
+    }
+
+    override suspend fun createReservation(
+        campsiteId: String,
+        notificationId: String,
+        startDate: String,
+        endDate: String
+    ): Boolean {
+        // Remove the winning notification once booked
+        _notifications.update { list -> list.filterNot { it.id == notificationId } }
+        return true
     }
 }
