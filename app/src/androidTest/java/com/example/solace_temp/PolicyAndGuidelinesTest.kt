@@ -11,6 +11,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.solace_temp.data.AppRepository
+import com.example.solace_temp.data.WaitingListErrorCallback
 import com.example.solace_temp.models.*
 import com.example.solace_temp.ui.screens.PolicyAndGuidelinesScreen
 import com.example.solace_temp.ui.screens.ProfileAndRoleScreen
@@ -42,9 +43,19 @@ class PolicyAndGuidelinesTest {
         override fun updateProfile(profile: Profile) {}
         override fun createCampsite(campsite: Campsite): Campsite = campsite
         override fun createLottery(lottery: Lottery): Lottery = lottery
-        override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit) { onResult(null) }
+        override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) { onResult.onResult(null) }
         override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
         override fun drawLotteryWinners(lotteryId: String) {}
+        override fun redrawLottery(lotteryId: String) {}
+        override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {
+            error("Not used in this test")
+        }
+        override suspend fun createReservation(
+            campsiteId: String,
+            notificationId: String,
+            startDate: String,
+            endDate: String
+        ): Boolean = error("Not used in this test")
         override fun removeCampsiteAsAdmin(campsiteId: String) {}
     }
 
