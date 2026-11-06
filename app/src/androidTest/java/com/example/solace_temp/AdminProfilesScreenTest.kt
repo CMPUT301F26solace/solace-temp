@@ -59,6 +59,7 @@ class AdminProfilesScreenTest {
             ) {
                 // Not needed for these tests.
             }
+            override suspend fun createReservation(campsiteId: String, notificationId: String, startDate: String, endDate: String): Boolean = error("Not used in this test")
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
         }
 
@@ -110,6 +111,7 @@ class AdminProfilesScreenTest {
             ) {
                 // Not needed for these tests.
             }
+            override suspend fun createReservation(campsiteId: String, notificationId: String, startDate: String, endDate: String): Boolean = error("Not used in this test")
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
             // Add dummy overrides for other required interface members if needed
         }
@@ -161,6 +163,7 @@ class AdminProfilesScreenTest {
             ) {
                 // Not needed for these tests.
             }
+            override suspend fun createReservation(campsiteId: String, notificationId: String, startDate: String, endDate: String): Boolean = error("Not used in this test")
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
             // Add dummy overrides for other required interface members if needed
         }
@@ -230,6 +233,7 @@ class ProfileAndRoleScreenTest {
             ) {
                 // Not needed for these tests.
             }
+            override suspend fun createReservation(campsiteId: String, notificationId: String, startDate: String, endDate: String): Boolean = error("Not used in this test")
             override fun removeCampsiteAsAdmin(campsiteId: String) {}
 
         }
