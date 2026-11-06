@@ -280,7 +280,7 @@ private class WaitingListTestRepository :
     private var pending: ((Result<Unit>) -> Unit)? = null
     private var joining = false
 
-    override fun joinWaitingList(
+    override fun joinWaitingListWithResult(
         lotteryId: String,
         entrantId: String,
         onResult: (Result<Unit>) -> Unit

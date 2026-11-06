@@ -168,13 +168,13 @@ class WaitingListRulesTest {
 
         var outcome: Result<Unit>? = null
 
-        MockAppRepository.joinWaitingList(created.id, entrant) {
+        MockAppRepository.joinWaitingListWithResult(created.id, entrant) {
             outcome = it
         }
 
         assertTrue(outcome!!.isSuccess)
 
-        MockAppRepository.joinWaitingList(created.id, entrant) {
+        MockAppRepository.joinWaitingListWithResult(created.id, entrant) {
             outcome = it
         }
 
@@ -185,6 +185,11 @@ class WaitingListRulesTest {
             MockAppRepository.lotteries.value
                 .first { it.id == created.id }
                 .waitingListEntrantIds.count { it == entrant }
+        )
+        assertNotNull(
+            MockAppRepository.lotteries.value
+                .first { it.id == created.id }
+                .waitlistJoinedAtMillis[entrant]
         )
     }
 
@@ -202,7 +207,7 @@ class WaitingListRulesTest {
 
         var outcome: Result<Unit>? = null
 
-        MockAppRepository.joinWaitingList(created.id, entrant) {
+        MockAppRepository.joinWaitingListWithResult(created.id, entrant) {
             outcome = it
         }
 
@@ -222,7 +227,11 @@ class WaitingListRulesTest {
             lottery.copy(
                 id = "",
                 bookingEndMillis = 0,
-                waitingListEntrantIds = listOf(entrant, "other-entrant")
+                waitingListEntrantIds = listOf(entrant, "other-entrant"),
+                waitlistJoinedAtMillis = mapOf(
+                    entrant to 100L,
+                    "other-entrant" to 200L
+                )
             )
         )
 
@@ -239,6 +248,12 @@ class WaitingListRulesTest {
             MockAppRepository.lotteries.value
                 .first { it.id == created.id }
                 .waitingListEntrantIds
+        )
+        assertEquals(
+            mapOf("other-entrant" to 200L),
+            MockAppRepository.lotteries.value
+                .first { it.id == created.id }
+                .waitlistJoinedAtMillis
         )
     }
 
