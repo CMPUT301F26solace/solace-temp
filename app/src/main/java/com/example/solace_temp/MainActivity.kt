@@ -1,5 +1,4 @@
 /**
- * MainActivity.kt
  * 
  * Purpose: This is the main entry point for the Solace Campsite application.
  * It sets up the Compose activity, navigation graph, and the bottom navigation bar.
@@ -51,6 +50,10 @@ import com.example.solace_temp.ui.screens.*
 import com.example.solace_temp.ui.theme.Solace_tempTheme
 import kotlinx.coroutines.delay
 import com.example.solace_temp.ui.screens.EntrantNotificationsScreen
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 
 /**
  * Main entry point of the Solace application.
@@ -91,6 +94,7 @@ fun SolaceCampsiteApp() {
     val profile by repository.currentProfile.collectAsState()
     val navController = rememberNavController()
     val navItems = getBottomNavItemsForRole(profile.role)
+    val scope = rememberCoroutineScope()
 
     // Automatically jump to the first tab of the new role when switching roles
     LaunchedEffect(profile.role) {
@@ -195,13 +199,71 @@ fun SolaceCampsiteApp() {
 
                 // Lottery Notifications & Invitations
                 composable(BottomNavItem.EntrantNotifications.route) {
+                    val scope = rememberCoroutineScope()
                     EntrantNotificationsScreen(
                         repository = repository,
                         onAcceptReservation = { campsiteId, _ ->
                             navController.navigate("campsite_details/$campsiteId")
                         },
-                        onDeclineReservation = { _ -> // will connect decline logic to repository
+                        onDeclineReservation = { notificationId, campsiteId ->
+                            scope.launch {
+                                repository.declineLotteryInvitation(notificationId, campsiteId)
+                            }
                         }
+                    )
+                }
+
+                // Entrant Notifications Destination
+                composable(AppScreen.EntrantNotifications.route) {
+                    EntrantNotificationsScreen(
+                        repository = repository,
+                        onAcceptReservation = { campsiteId, notificationId ->
+                            navController.navigate(AppScreen.CampsiteReservation.createRoute(campsiteId, notificationId))
+                        },
+                        onDeclineReservation = { notificationId, campsiteId ->
+                            scope.launch {
+                                repository.declineLotteryInvitation(notificationId, campsiteId)
+                            }
+                        }
+                    )
+                }
+
+                // Campsite Reservation Destination
+                composable(
+                    route = AppScreen.CampsiteReservation.route,
+                    arguments = listOf(
+                        navArgument("campsiteId") { type = NavType.StringType },
+                        navArgument("notificationId") { type = NavType.StringType }
+                    )
+                ) { backStackEntry ->
+                    val campsiteId = backStackEntry.arguments?.getString("campsiteId") ?: ""
+                    val notificationId = backStackEntry.arguments?.getString("notificationId") ?: ""
+
+                    CampsiteReservationScreen(
+                        campsiteId = campsiteId,
+                        notificationId = notificationId,
+                        onReservationConfirmed = {
+                            scope.launch {
+                                val success = repository.createReservation(
+                                    campsiteId = campsiteId,
+                                    notificationId = notificationId,
+                                    startDate = "2026-07-01",
+                                    endDate = "2026-07-07"
+                                )
+                                if (success) {
+                                    navController.popBackStack()
+                                }
+                            }
+                        },
+                        onBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+
+                composable(AppScreen.EntrantReservations.route) {
+                    EntrantReservationsScreen(
+                        repository = repository
                     )
                 }
 
@@ -249,6 +311,19 @@ fun SolaceCampsiteApp() {
                     )
                 }
 
+                composable("owner_reservations") {
+                    OwnerReservationsScreen(
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("owner_calendar") {
+                    OwnerCalendarScreen(
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
                 // ADMIN ROUTES
                 composable(BottomNavItem.AdminCampsites.route) {
                     AdminCampsitesScreen(
@@ -278,7 +353,15 @@ fun SolaceCampsiteApp() {
 
                 // SHARED PROFILE & CAMPSITE DETAILS ROUTES
                 composable(BottomNavItem.ProfileTab.route) {
-                    ProfileAndRoleScreen(repository = repository)
+                    ProfileAndRoleScreen(
+                        repository = repository,
+                        onNavigateToPolicy = { navController.navigate("policy_and_guidelines") }
+                    )
+                }
+                composable("policy_and_guidelines") {
+                    PolicyAndGuidelinesScreen(
+                        onBack = { navController.popBackStack() }
+                    )
                 }
                 composable("campsite_details/{campsiteId}") { backStackEntry ->
                     val campsiteId = backStackEntry.arguments?.getString("campsiteId") ?: ""

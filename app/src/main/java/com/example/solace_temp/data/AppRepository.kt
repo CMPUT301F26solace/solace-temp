@@ -10,6 +10,8 @@
 package com.example.solace_temp.data
 
 import com.example.solace_temp.models.*
+import com.example.solace_temp.validation.WaitingListException
+import com.example.solace_temp.validation.WaitingListRules
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +22,10 @@ import java.util.UUID
  * Interface defining the primary data access and domain operations for the application.
  * Provides streams of data via [StateFlow] and methods for data manipulation.
  */
+fun interface WaitingListErrorCallback {
+    fun onResult(error: String?)
+}
+
 interface AppRepository {
     /** The currently active user's profile. */
     val currentProfile: StateFlow<Profile>
@@ -47,13 +53,32 @@ interface AppRepository {
      * @param newRole The new [UserRole] to switch to.
      */
     fun switchRole(newRole: UserRole)
-    
+
     /**
      * Updates the current user's profile information.
      * @param profile The updated [Profile] data.
      */
     fun updateProfile(profile: Profile)
-    
+
+    /**
+     * Updates a profile and reports the result.
+     *
+     * Asynchronous repositories override this default implementation.
+     *
+     * @param profile The updated profile.
+     * @param onResult Receives success or failure when saving finishes.
+     */
+    fun updateProfile(
+        profile: Profile,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val result = runCatching {
+            updateProfile(profile)
+        }
+
+        onResult(result)
+    }
+
     /**
      * Creates a new campsite and registers it in the repository.
      * @param campsite The [Campsite] details to register.
@@ -73,7 +98,7 @@ interface AppRepository {
      * @param lotteryId The unique ID of the lottery.
      * @param entrantId The unique ID of the entrant joining the waitlist.
      */
-    fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit = {})
+    fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback = WaitingListErrorCallback { })
     
     /**
      * Removes an entrant from a lottery's waiting list.
@@ -81,18 +106,105 @@ interface AppRepository {
      * @param entrantId The unique ID of the entrant leaving the waitlist.
      */
     fun leaveWaitingList(lotteryId: String, entrantId: String)
+
+    /** Confirms selected camping nights for an invited lottery winner. Null means success. */
+    fun confirmBooking(
+        campsiteId: String,
+        lotteryId: String,
+        checkInMillis: Long,
+        checkOutMillis: Long,
+        onResult: (String?) -> Unit
+    ) {
+        onResult("Booking is not supported by this repository.")
+    }
+
+    /**
+     * Joins after checking the current lottery and reports completion (US 01.02.01).
+     * Bridges the existing string-error callback; Firestore overrides it atomically.
+     *
+     * @param lotteryId The lottery to join.
+     * @param entrantId The existing entrant device ID.
+     * @param onResult Receives success or the reason entry failed.
+     */
+    fun joinWaitingListWithResult(
+        lotteryId: String,
+        entrantId: String,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val lottery = lotteries.value.find { it.id == lotteryId }
+        val error = WaitingListRules.joinError(lottery, entrantId)
+
+        if (error != null) {
+            onResult(Result.failure(WaitingListException(error)))
+            return
+        }
+
+        joinWaitingList(lotteryId, entrantId) { message ->
+            onResult(
+                if (message == null) {
+                    Result.success(Unit)
+                } else {
+                    Result.failure(WaitingListException(message))
+                }
+            )
+        }
+    }
+
+    /**
+     * Leaves the waiting list and reports completion (US 01.02.02).
+     * Synchronous repositories use this default; asynchronous repositories override it.
+     *
+     * @param lotteryId The lottery to leave.
+     * @param entrantId The existing entrant device ID.
+     * @param onResult Receives success after removal completes, or a failure.
+     */
+    fun leaveWaitingList(
+        lotteryId: String,
+        entrantId: String,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val result = runCatching {
+            val lottery = lotteries.value.find { it.id == lotteryId }
+
+            WaitingListRules.leaveError(lottery, entrantId)?.let {
+                throw WaitingListException(it)
+            }
+
+            leaveWaitingList(lotteryId, entrantId)
+        }
+
+        onResult(result)
+    }
     
     /**
      * Triggers the winner draw process for a specific lottery.
      * @param lotteryId The unique ID of the lottery to draw winners for.
      */
     fun drawLotteryWinners(lotteryId: String)
+
+    /**
+     * Redraws or picks backup winners for a specific lottery.
+     * @param lotteryId The unique ID of the lottery.
+     */
+    fun redrawLottery(lotteryId: String)
     
     /**
      * Deletes a campsite from the platform. Requires Admin privileges.
      * @param campsiteId The unique ID of the campsite to remove.
      */
     fun removeCampsiteAsAdmin(campsiteId: String)
+
+    /**
+     * Declines a lottery invitation for an entrant and updates notification state.
+     */
+    suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String)
+
+    suspend fun createReservation(
+        campsiteId: String,
+        notificationId: String,
+        startDate: String,
+        endDate: String
+    ): Boolean
 }
 
 /**
@@ -202,6 +314,7 @@ object MockAppRepository : AppRepository {
     /** Exposes the mock notifications state. */
     override val notifications: StateFlow<List<AppNotification>> = _notifications.asStateFlow()
 
+
     /** Switches the user's role in the mock profile state. */
     override fun switchRole(newRole: UserRole) {
         _currentProfile.update { it.copy(role = newRole) }
@@ -232,11 +345,12 @@ object MockAppRepository : AppRepository {
     }
 
     /** Simulates a user joining the waiting list for a mock lottery. */
-    override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit) {
+    override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) {
         val lottery = _lotteries.value.find { it.id == lotteryId }
         val error = when {
             lottery == null -> "Lottery not found."
             entrantId in lottery.waitingListEntrantIds -> null
+            !canJoinLottery(lottery) -> "Lottery is not accepting entrants."
             lottery.waitlistCapacity != null &&
                 lottery.waitingListEntrantIds.size >= lottery.waitlistCapacity -> "Waitlist is full."
             else -> null
@@ -252,7 +366,7 @@ object MockAppRepository : AppRepository {
                 }
             }
         }
-        onResult(error)
+        onResult.onResult(error)
     }
 
     /** Simulates a user leaving the waiting list for a mock lottery. */
@@ -260,10 +374,53 @@ object MockAppRepository : AppRepository {
         _lotteries.update { list ->
             list.map {
                 if (it.id == lotteryId) {
-                    it.copy(waitingListEntrantIds = it.waitingListEntrantIds - entrantId)
-                } else it
+                    it.copy(
+                        waitingListEntrantIds =
+                            it.waitingListEntrantIds - entrantId,
+                        waitlistJoinedAtMillis =
+                            it.waitlistJoinedAtMillis - entrantId
+                    )
+                } else {
+                    it
+                }
             }
         }
+    }
+
+    /** Stores a confirmed booking in memory for UI tests and previews. */
+    override fun confirmBooking(
+        campsiteId: String,
+        lotteryId: String,
+        checkInMillis: Long,
+        checkOutMillis: Long,
+        onResult: (String?) -> Unit
+    ) {
+        val site = _campsites.value.find { it.id == campsiteId }
+        val lottery = _lotteries.value.find { it.id == lotteryId }
+        val entrantId = _currentProfile.value.deviceId
+        if (site == null || lottery == null) {
+            onResult("Campsite or lottery not found.")
+            return
+        }
+        val dates = bookingNights(checkInMillis, checkOutMillis)
+        val error = bookingValidationError(
+            site, lottery, entrantId, checkInMillis, checkOutMillis, _reservations.value
+        )
+        if (error != null) {
+            onResult(error)
+            return
+        }
+        val booking = Reservation(
+            id = "res-${UUID.randomUUID().toString().take(8)}",
+            campsiteId = site.id,
+            campsiteName = site.name,
+            entrantId = entrantId,
+            ownerId = site.ownerId,
+            bookedDates = dates,
+            status = ReservationStatus.ACTIVE
+        )
+        _reservations.update { it + booking }
+        onResult(null)
     }
 
     /** Simulates drawing winners for a mock lottery. */
@@ -271,8 +428,23 @@ object MockAppRepository : AppRepository {
         _lotteries.update { list ->
             list.map {
                 if (it.id == lotteryId) {
-                    val winners = it.waitingListEntrantIds.shuffled().take(it.maxWinners)
+                    val count = minOf(it.waitingListEntrantIds.size, it.maxWinners)
+                    val winners = it.waitingListEntrantIds.shuffled().take(count)
                     it.copy(invitedWinnerIds = winners, isDrawn = true)
+                } else it
+            }
+        }
+    }
+
+    /** Simulates redrawing winners from backup or remaining waitlist for a mock lottery. */
+    override fun redrawLottery(lotteryId: String) {
+        _lotteries.update { list ->
+            list.map {
+                if (it.id == lotteryId) {
+                    val remaining = it.waitingListEntrantIds.filter { id -> id !in it.invitedWinnerIds }
+                    val needed = it.maxWinners - it.invitedWinnerIds.size
+                    val newWinners = remaining.shuffled().take(needed)
+                    it.copy(invitedWinnerIds = it.invitedWinnerIds + newWinners, isDrawn = true)
                 } else it
             }
         }
@@ -281,5 +453,31 @@ object MockAppRepository : AppRepository {
     /** Simulates removing a campsite in the mock state. */
     override fun removeCampsiteAsAdmin(campsiteId: String) {
         _campsites.update { list -> list.filterNot { it.id == campsiteId } }
+    }
+
+    override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {
+        val currentDeviceId = _currentProfile.value.deviceId
+        _notifications.update { list -> list.filterNot { it.id == notificationId } }
+        _lotteries.update { list ->
+            list.map { lot ->
+                if (campsiteId in lot.campsiteIds) {
+                    lot.copy(invitedWinnerIds = lot.invitedWinnerIds.filterNot { it == currentDeviceId })
+                } else lot
+            }
+        }
+    }
+    fun updateNotifications(newList: List<AppNotification>) {
+        _notifications.value = newList
+    }
+
+    override suspend fun createReservation(
+        campsiteId: String,
+        notificationId: String,
+        startDate: String,
+        endDate: String
+    ): Boolean {
+        // Remove the winning notification once booked
+        _notifications.update { list -> list.filterNot { it.id == notificationId } }
+        return true
     }
 }

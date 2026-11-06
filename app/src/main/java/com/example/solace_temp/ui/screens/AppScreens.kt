@@ -11,6 +11,8 @@ package com.example.solace_temp.ui.screens
 
 import android.content.Context
 import android.content.Intent
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.Image
@@ -91,6 +93,14 @@ import kotlinx.coroutines.delay
 //
 //
 // =========================================================================
+
+sealed class AppScreen(val route: String) {
+    object EntrantNotifications : AppScreen("entrant_notifications")
+    object EntrantReservations : AppScreen("entrant_reservations")
+    object CampsiteReservation : AppScreen("campsite_reservation/{campsiteId}/{notificationId}") {
+        fun createRoute(campsiteId: String, notificationId: String) = "campsite_reservation/$campsiteId/$notificationId"
+    }
+}
 
 /**
  * Utility object for generating and sharing QR codes.
@@ -180,7 +190,6 @@ fun formatDateMillis(millis: Long?): String {
  */
 fun getLotteryStatus(lottery: Lottery?, campsite: Campsite? = null): String {
     if (lottery == null) return "N/A"
-    if (lottery.isDrawn) return "Finished"
     val now = System.currentTimeMillis()
     val regStart = lottery.registrationStartMillis ?: 0L
     val regEnd = lottery.registrationEndMillis ?: Long.MAX_VALUE
@@ -190,7 +199,8 @@ fun getLotteryStatus(lottery: Lottery?, campsite: Campsite? = null): String {
     return when {
         now < regStart -> "Upcoming"
         now in regStart..regEnd -> "Active"
-        now in bookingStart..bookingEnd || now in (regEnd + 1)..bookingEnd -> "Booking"
+        lottery.isDrawn && now > bookingEnd -> "Finished"
+        now in bookingStart..bookingEnd || now in (regEnd + 1)..bookingEnd || lottery.isDrawn -> "Booking"
         now > bookingEnd -> "Finished"
         else -> "N/A"
     }
@@ -277,9 +287,13 @@ fun CampsiteDetailsScreen(
                             .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (campsite.imageUrl != null) {
-                            // In a real app we'd use AsyncImage here, placeholder for now
-                            Icon(Icons.Default.Image, contentDescription = "Campsite Image", modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+                        if (!campsite.imageUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = campsite.imageUrl,
+                                contentDescription = "Campsite Promotional Image",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
                         } else {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Default.Image, contentDescription = "No Image", modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
@@ -972,6 +986,7 @@ fun CreateCampsiteScreen(
     var description by remember { mutableStateOf("") }
     var price by remember { mutableStateOf("") }
     var maxOccupancy by remember { mutableStateOf("") }
+    var imageUrlInput by remember { mutableStateOf("") }
 
     var feedbackMsg by remember { mutableStateOf("") }
     var feedbackIsError by remember { mutableStateOf(false) }
@@ -1039,6 +1054,14 @@ fun CreateCampsiteScreen(
             shape = textFieldShape,
             colors = textFieldColors
         )
+        OutlinedTextField(
+            value = imageUrlInput,
+            onValueChange = { imageUrlInput = it },
+            label = { Text("Image URL (Optional, e.g., https://...)") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = textFieldShape,
+            colors = textFieldColors
+        )
 
         if (feedbackMsg.isNotBlank()) {
             Text(
@@ -1086,7 +1109,8 @@ fun CreateCampsiteScreen(
                                 description = description.trim(),
                                 location = Geolocation(locationName = parkLocation.trim()),
                                 pricePerNight = parsedPrice,
-                                maxOccupancy = parsedOccupancy
+                                maxOccupancy = parsedOccupancy,
+                                imageUrl = imageUrlInput.trim().ifBlank { null }
                             )
                         )
                         createdCampsiteId = created.id
@@ -1129,7 +1153,10 @@ fun CreateCampsiteScreen(
  * @param repository The data repository for updating user profile and role settings.
  */
 @Composable
-fun ProfileAndRoleScreen(repository: AppRepository) {
+fun ProfileAndRoleScreen(
+    repository: AppRepository,
+    onNavigateToPolicy: () -> Unit = {}
+) {
     val profile by repository.currentProfile.collectAsState()
     var name by remember(profile.name) { mutableStateOf(profile.name) }
     var email by remember(profile.email) { mutableStateOf(profile.email) }
@@ -1202,6 +1229,15 @@ fun ProfileAndRoleScreen(repository: AppRepository) {
                     Text("Save Changes")
                 }
 
+                Spacer(Modifier.height(4.dp))
+                OutlinedButton(
+                    onClick = onNavigateToPolicy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("View App Policy & Guidelines")
+                }
+
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = "📱 Device ID: ${profile.deviceId}",
                     style = MaterialTheme.typography.bodySmall,
@@ -2284,6 +2320,81 @@ fun AdminProfilesScreen(
             Column(modifier = Modifier.fillMaxWidth()) {
                 DateRangePicker(state = dateState, modifier = Modifier.fillMaxWidth().height(450.dp))
             }
+        }
+    }
+}
+
+// =========================================================================
+// POLICY AND GUIDELINES SCREEN
+// =========================================================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PolicyAndGuidelinesScreen(
+    onBack: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("App Policy & Guidelines") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .background(Color(0xFFEDE8F8))
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            PolicyCard(
+                title = "1. Community Guidelines & General Policy",
+                content = "Welcome to Solace Campsite. Our platform connects outdoor enthusiasts with premium public and private campsites. All users are expected to treat nature, campsite owners, and fellow entrants with respect. Harassment, fraudulent bookings, or misuse of promotional codes will result in immediate suspension."
+            )
+
+            PolicyCard(
+                title = "2. Campsite Usage Rules",
+                content = "• Quiet Hours: Strictly enforced between 11:00 PM and 7:00 AM.\n" +
+                        "• Campfires: Permitted only in designated fire pits. Never leave a fire unattended.\n" +
+                        "• Wildlife Safety: Keep all food in bear-proof lockers or secure vehicles. Do not feed wildlife.\n" +
+                        "• Cleanliness: Pack out all garbage. Leave your campsite as clean as or cleaner than you found it."
+            )
+
+            PolicyCard(
+                title = "3. Cancellation & Refund Policies",
+                content = "• Standard Cancellation: Full refund if cancelled at least 7 days prior to check-in. 50% refund if cancelled 3 to 6 days prior.\n" +
+                        "• Weather & Fire Bans: 100% full refund issued automatically in the event of an official government fire ban, forest fire warning, or severe weather emergency affecting your dates."
+            )
+
+            PolicyCard(
+                title = "4. Lottery Terms & Conditions",
+                content = "• Waitlist Entry: Entrants may join active campsite lotteries during the specified registration window.\n" +
+                        "• Winner Selection: Winners are drawn randomly and notified via in-app notifications.\n" +
+                        "• Acceptance Window: Winners must accept their reservation invitation within 48 hours, or the spot will be offered to runner-up entrants.\n" +
+                        "• Capacity Limits: Some lotteries enforce waitlist capacity caps to ensure fair access."
+            )
+        }
+    }
+}
+
+@Composable
+fun PolicyCard(title: String, content: String) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            HorizontalDivider()
+            Text(content, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }

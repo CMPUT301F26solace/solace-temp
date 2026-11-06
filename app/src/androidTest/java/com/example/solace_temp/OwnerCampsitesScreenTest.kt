@@ -4,6 +4,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.solace_temp.data.AppRepository
+import com.example.solace_temp.data.WaitingListErrorCallback
 import com.example.solace_temp.models.*
 import com.example.solace_temp.ui.screens.OwnerCampsitesScreen
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import androidx.compose.ui.test.performScrollTo
 
 @RunWith(AndroidJUnit4::class)
 class OwnerCampsitesScreenTest {
@@ -21,8 +23,6 @@ class OwnerCampsitesScreenTest {
     class FakeListAppRepository : AppRepository {
         val _currentProfile = MutableStateFlow(Profile())
         override val currentProfile: StateFlow<Profile> = _currentProfile
-
-        override val profiles: StateFlow<List<Profile>> = MutableStateFlow(emptyList())
 
         val _campsites = MutableStateFlow<List<Campsite>>(emptyList())
         override val campsites: StateFlow<List<Campsite>> = _campsites
@@ -36,12 +36,15 @@ class OwnerCampsitesScreenTest {
         override fun updateProfile(profile: Profile) {}
         override fun createCampsite(campsite: Campsite): Campsite = campsite
         override fun createLottery(lottery: Lottery): Lottery = lottery
-        override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: (String?) -> Unit) {
-            onResult(null)
+        override fun joinWaitingList(lotteryId: String, entrantId: String, onResult: WaitingListErrorCallback) {
+            onResult.onResult(null)
         }
         override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
         override fun drawLotteryWinners(lotteryId: String) {}
+        override fun redrawLottery(lotteryId: String) {}
+        override suspend fun createReservation(campsiteId: String, notificationId: String, startDate: String, endDate: String): Boolean = error("Not used in this test")
         override fun removeCampsiteAsAdmin(campsiteId: String) {}
+        override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {}
     }
 
     @Test
@@ -125,10 +128,13 @@ class OwnerCampsitesScreenTest {
         // Verify my campsite is displayed with required summary info
         composeTestRule.onNodeWithText("My Awesome Campsite").assertIsDisplayed()
         composeTestRule.onNodeWithText("📍 My Park").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Max 12 guests").assertIsDisplayed()
-        
+        composeTestRule.onNodeWithText("Max 12 guests", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+
         // Check for thumbnail (content description based on image logic)
-        composeTestRule.onNodeWithContentDescription("Thumbnail").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Campsite Image")
+            .assertIsDisplayed()
 
         // Verify other owner's campsite is excluded
         composeTestRule.onNodeWithText("Someone Else's Campsite").assertDoesNotExist()
