@@ -69,6 +69,7 @@ class CampsiteLotteryCreationTest {
         override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
         override fun drawLotteryWinners(lotteryId: String) {}
         override fun redrawLottery(lotteryId: String) {}
+        override suspend fun createReservation(campsiteId: String, notificationId: String, startDate: String, endDate: String): Boolean = error("Not used in this test")
         override fun removeCampsiteAsAdmin(campsiteId: String) {}
         override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {}
     }
