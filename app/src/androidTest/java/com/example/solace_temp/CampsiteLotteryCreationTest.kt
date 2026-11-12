@@ -12,7 +12,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.solace_temp.data.AppRepository
 import com.example.solace_temp.data.WaitingListErrorCallback
 import com.example.solace_temp.models.*
+import com.example.solace_temp.ui.screens.CampsiteListScreen
 import com.example.solace_temp.ui.screens.CreateLotteryDialog
+import com.example.solace_temp.ui.screens.LotteryDetailsScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
@@ -72,6 +74,9 @@ class CampsiteLotteryCreationTest {
         override suspend fun createReservation(campsiteId: String, notificationId: String, startDate: String, endDate: String): Boolean = error("Not used in this test")
         override fun removeCampsiteAsAdmin(campsiteId: String) {}
         override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {}
+        override fun updateLottery(lottery: Lottery) {
+            _lotteries.value = _lotteries.value.map { if (it.id == lottery.id) lottery else it }
+        }
     }
 
     @Test
@@ -167,5 +172,125 @@ class CampsiteLotteryCreationTest {
         assertEquals(5, created.maxWinners)
         assertEquals("Dialog Configured Lottery", created.name)
         assertTrue(fakeRepo._lotteries.value.contains(created))
+    }
+
+    @Test
+    fun createLotteryDialog_hidesCampsitesAlreadyInAnActiveLottery() {
+        val fakeRepo = LotteryFakeRepository()
+        val camp1 = Campsite(id = "camp-1", ownerId = "owner-lottery-test", name = "Available Camp")
+        val camp2 = Campsite(id = "camp-2", ownerId = "owner-lottery-test", name = "Occupied Camp")
+        fakeRepo._campsites.value = listOf(camp1, camp2)
+
+        val now = System.currentTimeMillis()
+        val existingLottery = Lottery(
+            id = "active-lot",
+            name = "Existing Active Lottery",
+            campsiteIds = listOf("camp-2"),
+            ownerId = "owner-lottery-test",
+            registrationStartMillis = now - 10000L,
+            registrationEndMillis = now + 86400000L,
+            bookingStartMillis = now + 2 * 86400000L,
+            bookingEndMillis = now + 10 * 86400000L,
+            isDrawn = false
+        )
+        fakeRepo._lotteries.value = listOf(existingLottery)
+
+        composeTestRule.setContent {
+            CreateLotteryDialog(
+                campsite = camp1,
+                repository = fakeRepo,
+                onDismiss = {},
+                onSuccess = {}
+            )
+        }
+
+        // Available Camp should be shown in assigned campsites list
+        composeTestRule.onNodeWithText("Available Camp (Max Guests: 4)").performScrollTo().assertIsDisplayed()
+
+        // Occupied Camp (which is in active-lot) should NOT be displayed
+        composeTestRule.onNodeWithText("Occupied Camp (Max Guests: 4)").assertDoesNotExist()
+    }
+
+    @Test
+    fun campsiteListScreen_displaysMultiLotteryLabel_forMultiCampsiteLotteries() {
+        val fakeRepo = LotteryFakeRepository()
+        val camp1 = Campsite(id = "c1", ownerId = "owner-lottery-test", name = "First Camp")
+        val camp2 = Campsite(id = "c2", ownerId = "owner-lottery-test", name = "Second Camp")
+        fakeRepo._campsites.value = listOf(camp1, camp2)
+
+        val now = System.currentTimeMillis()
+        val multiLottery = Lottery(
+            id = "multi-lot-1",
+            name = "Grand Joint Lottery",
+            campsiteIds = listOf("c1", "c2"),
+            ownerId = "owner-lottery-test",
+            registrationStartMillis = now - 10000L,
+            registrationEndMillis = now + 86400000L,
+            bookingStartMillis = now + 2 * 86400000L,
+            bookingEndMillis = now + 10 * 86400000L
+        )
+        fakeRepo._lotteries.value = listOf(multiLottery)
+
+        composeTestRule.setContent {
+            CampsiteListScreen(
+                title = "Explore Campsites",
+                repository = fakeRepo,
+                onSelectCampsite = {}
+            )
+        }
+
+        // Verify that the campsite card displays "Multi Lottery: Grand Joint Lottery"
+        composeTestRule.onNodeWithText("Multi Lottery: Grand Joint Lottery").assertIsDisplayed()
+    }
+
+    @Test
+    fun lotteryDetailsScreen_ownerEditsLotterySuccessfully() {
+        val fakeRepo = LotteryFakeRepository()
+        val camp1 = Campsite(id = "c1", ownerId = "owner-lottery-test", name = "Test Camp")
+        fakeRepo._campsites.value = listOf(camp1)
+
+        val now = System.currentTimeMillis()
+        val upcomingLottery = Lottery(
+            id = "up-lot-1",
+            name = "Original Lottery Name",
+            campsiteIds = listOf("c1"),
+            ownerId = "owner-lottery-test",
+            maxWinners = 3,
+            registrationStartMillis = now + 86400000L,
+            registrationEndMillis = now + 4 * 86400000L,
+            bookingStartMillis = now + 12 * 86400000L,
+            bookingEndMillis = now + 20 * 86400000L
+        )
+        fakeRepo._lotteries.value = listOf(upcomingLottery)
+
+        composeTestRule.setContent {
+            LotteryDetailsScreen(
+                lotteryId = "up-lot-1",
+                repository = fakeRepo,
+                onBack = {},
+                onSelectCampsite = {},
+                onViewWaitlist = {}
+            )
+        }
+
+        // Verify "Edit Lottery" button is displayed and click it
+        composeTestRule.onNodeWithText("Edit Lottery").performClick()
+
+        // Verify edit pop-up is shown
+        composeTestRule.onNodeWithText("Edit Lottery Configuration").assertIsDisplayed()
+
+        // Change lottery name
+        composeTestRule.onNodeWithText("Lottery Name (Required)").performTextClearance()
+        composeTestRule.onNodeWithText("Lottery Name (Required)").performTextInput("New Edited Lottery Name")
+
+        // Save changes
+        composeTestRule.onNodeWithText("Save Changes").performClick()
+
+        // Verify success view
+        composeTestRule.onNodeWithText("Lottery Updated").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Done").performClick()
+
+        // Verify updated in repository state
+        assertEquals("New Edited Lottery Name", fakeRepo._lotteries.value.first().name)
     }
 }

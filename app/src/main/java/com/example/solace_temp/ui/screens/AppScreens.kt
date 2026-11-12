@@ -36,6 +36,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
@@ -45,6 +49,8 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -547,6 +553,7 @@ fun CampsiteDetailsScreen(
                         Spacer(Modifier.height(16.dp))
                         
                         // Management Quick Actions
+                        var showEditCampsiteDialog by remember { mutableStateOf(false) }
                         var showCreateLotteryDialog by remember { mutableStateOf(false) }
                         var ownerLotteryFeedback by remember { mutableStateOf("") }
 
@@ -555,7 +562,10 @@ fun CampsiteDetailsScreen(
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                FilledIconButton(onClick = { /* TODO */ }, colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                                FilledIconButton(
+                                    onClick = { showEditCampsiteDialog = true },
+                                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                                ) {
                                     Icon(Icons.Default.Edit, contentDescription = "Edit Details", tint = MaterialTheme.colorScheme.onPrimaryContainer)
                                 }
                                 Text("Edit", style = MaterialTheme.typography.labelSmall)
@@ -583,6 +593,17 @@ fun CampsiteDetailsScreen(
                                 }
                                 Text("Entrants", style = MaterialTheme.typography.labelSmall)
                             }
+                        }
+
+                        if (showEditCampsiteDialog) {
+                            EditCampsiteDialog(
+                                campsite = campsite,
+                                repository = repository,
+                                onDismiss = { showEditCampsiteDialog = false },
+                                onSuccess = {
+                                    showEditCampsiteDialog = false
+                                }
+                            )
                         }
 
                         if (showCreateLotteryDialog) {
@@ -825,11 +846,17 @@ fun OwnerCampsitesScreen(
                             Box(
                                 modifier = Modifier
                                     .size(90.dp)
-                                    .background(Color(0xFFE3E8EF), RoundedCornerShape(16.dp)),
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFFE3E8EF)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (site.imageUrl != null) {
-                                    Icon(Icons.Default.Image, contentDescription = "Campsite Image", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                                if (!site.imageUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = site.imageUrl,
+                                        contentDescription = "Campsite Image",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
                                 } else {
                                     Icon(Icons.Default.Image, contentDescription = "Placeholder Image", tint = Color.Gray, modifier = Modifier.size(36.dp))
                                 }
@@ -894,8 +921,9 @@ fun OwnerCampsitesScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                val lotteryPrefix = if (activeLottery != null && activeLottery.campsiteIds.size > 1) "Multi Lottery:" else "Lottery:"
                                 Text(
-                                    text = if (activeLottery != null) "Lottery: ${activeLottery.name}" else "Lottery Status",
+                                    text = if (activeLottery != null) "$lotteryPrefix ${activeLottery.name}" else "Lottery Status",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = statusTextColor,
@@ -1703,31 +1731,33 @@ fun LotteryDetailsScreen(
                             }
                             else -> Unit
                         }
-                    }
-                }
 
-                // Placeholder card for future lottery draw controls and management features
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            "Lottery Sampling & Draw Controls",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Advanced sampling algorithms, winner draw triggers, and notification management will appear here in future updates.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
+                        var showEditLotteryDialog by remember { mutableStateOf(false) }
+
+                        if (lottery.ownerId == profile.deviceId || profile.isAdmin) {
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = { showEditLotteryDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit Lottery", modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Edit Lottery")
+                            }
+                        }
+
+                        if (showEditLotteryDialog) {
+                            EditLotteryDialog(
+                                lottery = lottery,
+                                repository = repository,
+                                onDismiss = { showEditLotteryDialog = false },
+                                onSuccess = { showEditLotteryDialog = false }
+                            )
+                        }
                     }
                 }
             }
@@ -1737,6 +1767,763 @@ fun LotteryDetailsScreen(
 
 // =========================================================================
 // CREATE LOTTERY DIALOG
+// =========================================================================
+// EDIT CAMPSITE DIALOG
+// =========================================================================
+/**
+ * Dialog allowing Campsite Owners or Admins to edit an existing campsite's details.
+ * 
+ * Includes form fields for name, location, description, price, occupancy, and cover image,
+ * with identical validation checks as [CreateCampsiteScreen]. Upon successful validation and save/upload,
+ * the dialog transitions to display a success status view.
+ * 
+ * @param campsite The [Campsite] entity being edited.
+ * @param repository The data repository used to execute campsite updates and image uploads.
+ * @param onDismiss Callback invoked when the dialog is dismissed or cancelled.
+ * @param onSuccess Callback invoked when the user completes the campsite edit.
+ */
+@Composable
+fun EditCampsiteDialog(
+    campsite: Campsite,
+    repository: AppRepository,
+    onDismiss: () -> Unit,
+    onSuccess: () -> Unit
+) {
+    var name by remember(campsite) { mutableStateOf(campsite.name) }
+    var parkLocation by remember(campsite) { mutableStateOf(campsite.location.locationName) }
+    var description by remember(campsite) { mutableStateOf(campsite.description) }
+    var price by remember(campsite) {
+        mutableStateOf(
+            if (campsite.pricePerNight % 1.0 == 0.0) campsite.pricePerNight.toInt().toString()
+            else campsite.pricePerNight.toString()
+        )
+    }
+    var maxOccupancy by remember(campsite) { mutableStateOf(campsite.maxOccupancy.toString()) }
+    var imageUrlInput by remember(campsite) { mutableStateOf(campsite.imageUrl ?: "") }
+
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var isSaving by remember { mutableStateOf(false) }
+    var feedbackMsg by remember { mutableStateOf("") }
+    var feedbackIsError by remember { mutableStateOf(false) }
+    var isSuccessState by remember { mutableStateOf(false) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            selectedImageUri = uri
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (!isSaving) onDismiss()
+        },
+        title = {
+            if (isSuccessState) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = "Success",
+                        tint = Color(0xFF4CAF50),
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Text("Campsite Updated", fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Text("Edit Campsite Details", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            if (isSuccessState) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        "All campsite information for \"${name.trim()}\" has been successfully edited and updated.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        "Changes have been persisted to Firebase storage and are now active.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        "Modify your campsite details below. All required fields will be verified before saving.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    val textFieldShape = RoundedCornerShape(16.dp)
+                    val textFieldColors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    )
+
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Campsite Name (Required)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = textFieldShape,
+                        colors = textFieldColors,
+                        enabled = !isSaving
+                    )
+                    OutlinedTextField(
+                        value = parkLocation,
+                        onValueChange = { parkLocation = it },
+                        label = { Text("Location (Required, e.g., Banff, Jasper)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = textFieldShape,
+                        colors = textFieldColors,
+                        enabled = !isSaving
+                    )
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description & Amenities (Required)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = textFieldShape,
+                        colors = textFieldColors,
+                        enabled = !isSaving
+                    )
+                    OutlinedTextField(
+                        value = price,
+                        onValueChange = { price = it },
+                        label = { Text("Price per Night ($) (Required)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = textFieldShape,
+                        colors = textFieldColors,
+                        enabled = !isSaving
+                    )
+                    OutlinedTextField(
+                        value = maxOccupancy,
+                        onValueChange = { maxOccupancy = it },
+                        label = { Text("Maximum Occupancy (Required)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = textFieldShape,
+                        colors = textFieldColors,
+                        enabled = !isSaving
+                    )
+
+                    // Image selection / upload section
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "Campsite Cover Image",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            if (selectedImageUri != null || imageUrlInput.isNotBlank()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(120.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.surfaceVariant,
+                                            RoundedCornerShape(12.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AsyncImage(
+                                        model = selectedImageUri ?: imageUrlInput,
+                                        contentDescription = "Selected Campsite Image",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = { imagePickerLauncher.launch("image/*") },
+                                enabled = !isSaving,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            ) {
+                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(if (selectedImageUri != null) "Change Selected Image" else "Choose Image from Device")
+                            }
+
+                            OutlinedTextField(
+                                value = imageUrlInput,
+                                onValueChange = {
+                                    imageUrlInput = it
+                                    selectedImageUri = null
+                                },
+                                label = { Text("Or Image URL (Optional, e.g., https://...)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = textFieldShape,
+                                colors = textFieldColors,
+                                enabled = !isSaving
+                            )
+                        }
+                    }
+
+                    if (feedbackMsg.isNotBlank()) {
+                        Text(
+                            text = feedbackMsg,
+                            color = if (feedbackIsError) MaterialTheme.colorScheme.error else Color(0xFF4CAF50),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (isSaving) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text("Saving updates to Firebase...", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (isSuccessState) {
+                Button(
+                    onClick = {
+                        onSuccess()
+                    }
+                ) {
+                    Text("Done")
+                }
+            } else {
+                Button(
+                    onClick = {
+                        val parsedPrice = price.toDoubleOrNull()
+                        val parsedOccupancy = maxOccupancy.toIntOrNull()
+
+                        when {
+                            name.isBlank() -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Campsite name cannot be empty."
+                            }
+                            parkLocation.isBlank() -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Location cannot be empty."
+                            }
+                            description.isBlank() -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Description cannot be empty."
+                            }
+                            parsedPrice == null || parsedPrice < 0 -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Please enter a valid fee/price per night."
+                            }
+                            parsedOccupancy == null || parsedOccupancy <= 0 -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Please enter a valid maximum occupancy."
+                            }
+                            else -> {
+                                feedbackIsError = false
+                                isSaving = true
+                                feedbackMsg = ""
+
+                                val currentUri = selectedImageUri
+                                if (currentUri != null) {
+                                    repository.uploadCampsiteImage(campsite.id, currentUri) { uploadResult ->
+                                        uploadResult.fold(
+                                            onSuccess = { downloadUrl ->
+                                                val updatedSite = campsite.copy(
+                                                    name = name.trim(),
+                                                    location = campsite.location.copy(locationName = parkLocation.trim()),
+                                                    description = description.trim(),
+                                                    pricePerNight = parsedPrice,
+                                                    maxOccupancy = parsedOccupancy,
+                                                    imageUrl = downloadUrl
+                                                )
+                                                repository.updateCampsite(updatedSite) { updateResult ->
+                                                    isSaving = false
+                                                    updateResult.fold(
+                                                        onSuccess = {
+                                                            isSuccessState = true
+                                                        },
+                                                        onFailure = { err ->
+                                                            feedbackIsError = true
+                                                            feedbackMsg = "Error: ${err.message ?: "Failed to update campsite."}"
+                                                        }
+                                                    )
+                                                }
+                                            },
+                                            onFailure = { err ->
+                                                isSaving = false
+                                                feedbackIsError = true
+                                                feedbackMsg = "Error uploading image to Firebase Storage: ${err.message}"
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    val updatedSite = campsite.copy(
+                                        name = name.trim(),
+                                        location = campsite.location.copy(locationName = parkLocation.trim()),
+                                        description = description.trim(),
+                                        pricePerNight = parsedPrice,
+                                        maxOccupancy = parsedOccupancy,
+                                        imageUrl = imageUrlInput.trim().ifBlank { null }
+                                    )
+                                    repository.updateCampsite(updatedSite) { updateResult ->
+                                        isSaving = false
+                                        updateResult.fold(
+                                            onSuccess = {
+                                                isSuccessState = true
+                                            },
+                                            onFailure = { err ->
+                                                feedbackIsError = true
+                                                feedbackMsg = "Error: ${err.message ?: "Failed to update campsite."}"
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isSaving
+                ) {
+                    Text("Save Changes")
+                }
+            }
+        },
+        dismissButton = {
+            if (!isSuccessState) {
+                TextButton(
+                    onClick = onDismiss,
+                    enabled = !isSaving
+                ) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
+
+// =========================================================================
+// EDIT LOTTERY DIALOG
+// =========================================================================
+/**
+ * Dialog allowing Campsite Owners or Admins to edit an existing lottery's configuration.
+ * 
+ * Configurable fields include lottery name, max winners, waitlist capacity, assigned campsites,
+ * registration window, and booking window. Enforces registration date editing constraints based
+ * on lottery status (Upcoming allows editing start & end; Active allows editing end date only),
+ * and validates that booking start is at least 1 week after registration close.
+ * 
+ * @param lottery The [Lottery] entity being edited.
+ * @param repository The data repository used to save lottery updates.
+ * @param onDismiss Callback invoked when the dialog is dismissed or cancelled.
+ * @param onSuccess Callback invoked when the lottery edit is completed.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditLotteryDialog(
+    lottery: Lottery,
+    repository: AppRepository,
+    onDismiss: () -> Unit,
+    onSuccess: () -> Unit
+) {
+    val profile by repository.currentProfile.collectAsState()
+    val campsites by repository.campsites.collectAsState()
+    val lotteries by repository.lotteries.collectAsState()
+
+    var lotteryName by remember(lottery) { mutableStateOf(lottery.name) }
+    var selectedCampsiteIds by remember(lottery) { mutableStateOf(lottery.campsiteIds) }
+    var maxWinnersText by remember(lottery) { mutableStateOf(lottery.maxWinners.toString()) }
+    var waitlistCapacityText by remember(lottery) { mutableStateOf(lottery.waitlistCapacity?.toString() ?: "") }
+    var regStartMillis by remember(lottery) { mutableStateOf(lottery.registrationStartMillis) }
+    var regEndMillis by remember(lottery) { mutableStateOf(lottery.registrationEndMillis) }
+    var bookingStartMillis by remember(lottery) { mutableStateOf(lottery.bookingStartMillis) }
+    var bookingEndMillis by remember(lottery) { mutableStateOf(lottery.bookingEndMillis) }
+
+    var showRegRangeDialog by remember { mutableStateOf(false) }
+    var showRegEndSingleDialog by remember { mutableStateOf(false) }
+    var showBookingDateDialog by remember { mutableStateOf(false) }
+
+    var feedbackMsg by remember { mutableStateOf("") }
+    var feedbackIsError by remember { mutableStateOf(false) }
+    var isSuccessState by remember { mutableStateOf(false) }
+
+    val ownerCampsites = campsites.filter { it.ownerId == profile.deviceId }.ifEmpty {
+        campsites.filter { lottery.campsiteIds.contains(it.id) }
+    }
+    // Only display campsites that are available or currently assigned to this lottery
+    val availableOwnerCampsites = ownerCampsites.filter { site ->
+        selectedCampsiteIds.contains(site.id) || !lotteries.any { lot ->
+            lot.id != lottery.id && lot.campsiteIds.contains(site.id) && !lot.isDrawn && getLotteryStatus(lot, site) != "Finished" && getLotteryStatus(lot, site) != "N/A"
+        }
+    }
+    val activeCampsites = availableOwnerCampsites.filter { selectedCampsiteIds.contains(it.id) }
+    val totalMaxGuests = activeCampsites.sumOf { it.maxOccupancy }
+
+    val status = getLotteryStatus(lottery, activeCampsites.firstOrNull())
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            if (isSuccessState) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = "Success",
+                        tint = Color(0xFF4CAF50),
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Text("Lottery Updated", fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Text("Edit Lottery Configuration", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            if (isSuccessState) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        "Lottery configuration for \"${lotteryName.trim()}\" has been successfully updated.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        "Changes are saved and live in the system.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        "Update the lottery settings below. Required fields and date spacing rules will be verified before saving.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = lotteryName,
+                        onValueChange = { lotteryName = it },
+                        label = { Text("Lottery Name (Required)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = maxWinnersText,
+                        onValueChange = { maxWinnersText = it },
+                        label = { Text("Number of Lottery Winners (Required)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = waitlistCapacityText,
+                        onValueChange = { waitlistCapacityText = it },
+                        label = { Text("Waitlist capacity (optional)") },
+                        supportingText = { Text("Leave blank for unlimited entrants") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text("Assigned Campsite(s):", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    availableOwnerCampsites.forEach { site ->
+                        val isSelected = selectedCampsiteIds.contains(site.id)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedCampsiteIds = if (isSelected) {
+                                        if (selectedCampsiteIds.size > 1) selectedCampsiteIds - site.id else selectedCampsiteIds
+                                    } else {
+                                        selectedCampsiteIds + site.id
+                                    }
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { checked ->
+                                    selectedCampsiteIds = if (checked) {
+                                        selectedCampsiteIds + site.id
+                                    } else {
+                                        if (selectedCampsiteIds.size > 1) selectedCampsiteIds - site.id else selectedCampsiteIds
+                                    }
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("${site.name} (Max Guests: ${site.maxOccupancy})", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    Text("Total Max Guest Capacity: $totalMaxGuests", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Registration Window: ${formatDateMillis(regStartMillis)} to ${formatDateMillis(regEndMillis)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    when (status) {
+                        "Upcoming" -> {
+                            OutlinedButton(
+                                onClick = { showRegRangeDialog = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Edit Registration Start & End Dates")
+                            }
+                        }
+                        "Active" -> {
+                            OutlinedButton(
+                                onClick = { showRegEndSingleDialog = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Edit Registration End Date Only")
+                            }
+                            Text(
+                                "(Registration is currently Active. Open date cannot be modified.)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        else -> {
+                            Text(
+                                "(Registration period has closed. Registration dates cannot be modified.)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Booking Window: ${formatDateMillis(bookingStartMillis)} to ${formatDateMillis(bookingEndMillis)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    OutlinedButton(
+                        onClick = { showBookingDateDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Select Booking Window Dates")
+                    }
+
+                    if (feedbackMsg.isNotBlank()) {
+                        Text(
+                            text = feedbackMsg,
+                            color = if (feedbackIsError) MaterialTheme.colorScheme.error else Color(0xFF4CAF50),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (isSuccessState) {
+                Button(onClick = onSuccess) { Text("Done") }
+            } else {
+                Button(
+                    onClick = {
+                        val parsedWinners = maxWinnersText.toIntOrNull()
+                        val parsedCapacity = if (waitlistCapacityText.isBlank()) null else waitlistCapacityText.toIntOrNull()
+
+                        when {
+                            lotteryName.isBlank() -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Lottery name cannot be empty."
+                            }
+                            parsedWinners == null || parsedWinners <= 0 -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Number of lottery winners must be greater than 0."
+                            }
+                            parsedWinners > totalMaxGuests -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Number of winners ($parsedWinners) cannot exceed the total maximum guest capacity ($totalMaxGuests) of the selected campsite(s)."
+                            }
+                            waitlistCapacityText.isNotBlank() && (parsedCapacity == null || parsedCapacity < parsedWinners) -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Waitlist capacity must be a whole number at least equal to the winner count ($parsedWinners)."
+                            }
+                            regStartMillis == null || regEndMillis == null -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Please select both a start and closing date/time."
+                            }
+                            bookingStartMillis == null || bookingEndMillis == null -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Please select both a start and end date for the booking window."
+                            }
+                            regEndMillis!! <= regStartMillis!! -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Registration close date must be strictly after the open date."
+                            }
+                            bookingEndMillis!! <= bookingStartMillis!! -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Booking end date must be strictly after the start date."
+                            }
+                            bookingStartMillis!! < regEndMillis!! + 7 * 24 * 60 * 60 * 1000L -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Booking period must start at least 1 week after the registration period."
+                            }
+                            status == "Upcoming" && regStartMillis!! < System.currentTimeMillis() - 86400000L -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Registration open date must be set in the future."
+                            }
+                            status == "Active" && regEndMillis!! < System.currentTimeMillis() - 86400000L -> {
+                                feedbackIsError = true
+                                feedbackMsg = "Error: Registration close date must be set in the future."
+                            }
+                            else -> {
+                                feedbackIsError = false
+                                val updated = lottery.copy(
+                                    name = lotteryName.trim(),
+                                    campsiteIds = selectedCampsiteIds,
+                                    maxWinners = parsedWinners,
+                                    waitlistCapacity = parsedCapacity,
+                                    registrationStartMillis = regStartMillis,
+                                    registrationEndMillis = regEndMillis,
+                                    registrationStart = formatDateMillis(regStartMillis),
+                                    registrationEnd = formatDateMillis(regEndMillis),
+                                    bookingStartMillis = bookingStartMillis,
+                                    bookingEndMillis = bookingEndMillis,
+                                    bookingStart = formatDateMillis(bookingStartMillis),
+                                    bookingEnd = formatDateMillis(bookingEndMillis)
+                                )
+                                repository.updateLottery(updated) { result ->
+                                    result.fold(
+                                        onSuccess = {
+                                            isSuccessState = true
+                                        },
+                                        onFailure = { err ->
+                                            feedbackIsError = true
+                                            feedbackMsg = "Error updating lottery: ${err.message}"
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text("Save Changes")
+                }
+            }
+        },
+        dismissButton = {
+            if (!isSuccessState) {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        }
+    )
+
+    if (showRegRangeDialog) {
+        val dateState = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = regStartMillis,
+            initialSelectedEndDateMillis = regEndMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showRegRangeDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    regStartMillis = dateState.selectedStartDateMillis
+                    regEndMillis = dateState.selectedEndDateMillis
+                    showRegRangeDialog = false
+                }) { Text("Save Dates") }
+            },
+            dismissButton = { TextButton(onClick = { showRegRangeDialog = false }) { Text("Cancel") } }
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                DateRangePicker(state = dateState, modifier = Modifier.fillMaxWidth().height(450.dp))
+            }
+        }
+    }
+
+    if (showRegEndSingleDialog) {
+        val dateState = rememberDatePickerState(
+            initialSelectedDateMillis = regEndMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showRegEndSingleDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    regEndMillis = dateState.selectedDateMillis
+                    showRegEndSingleDialog = false
+                }) { Text("Save End Date") }
+            },
+            dismissButton = { TextButton(onClick = { showRegEndSingleDialog = false }) { Text("Cancel") } }
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                DatePicker(state = dateState, modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
+
+    if (showBookingDateDialog) {
+        val dateState = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = bookingStartMillis,
+            initialSelectedEndDateMillis = bookingEndMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showBookingDateDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    bookingStartMillis = dateState.selectedStartDateMillis
+                    bookingEndMillis = dateState.selectedEndDateMillis
+                    showBookingDateDialog = false
+                }) { Text("Save Dates") }
+            },
+            dismissButton = { TextButton(onClick = { showBookingDateDialog = false }) { Text("Cancel") } }
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                DateRangePicker(state = dateState, modifier = Modifier.fillMaxWidth().height(450.dp))
+            }
+        }
+    }
+}
+
 // =========================================================================
 /**
  * Dialog allowing Owners to configure and initiate a lottery registration period for an owned campsite.
@@ -1771,7 +2558,13 @@ fun CreateLotteryDialog(
     var feedbackIsError by remember { mutableStateOf(false) }
 
     val ownerCampsites = campsites.filter { it.ownerId == profile.deviceId }.ifEmpty { listOf(campsite) }
-    val activeCampsites = ownerCampsites.filter { selectedCampsiteIds.contains(it.id) }
+    // Only display campsites that are not currently part of an active/undrawn lottery
+    val availableOwnerCampsites = ownerCampsites.filter { site ->
+        site.id == campsite.id || !lotteries.any { lot ->
+            lot.campsiteIds.contains(site.id) && !lot.isDrawn && getLotteryStatus(lot, site) != "Finished" && getLotteryStatus(lot, site) != "N/A"
+        }
+    }
+    val activeCampsites = availableOwnerCampsites.filter { selectedCampsiteIds.contains(it.id) }
     val totalMaxGuests = activeCampsites.sumOf { it.maxOccupancy }
 
     AlertDialog(
@@ -1809,7 +2602,7 @@ fun CreateLotteryDialog(
                 )
 
                 Text("Assigned Campsite(s):", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                ownerCampsites.forEach { site ->
+                availableOwnerCampsites.forEach { site ->
                     val isSelected = selectedCampsiteIds.contains(site.id)
                     Row(
                         modifier = Modifier
