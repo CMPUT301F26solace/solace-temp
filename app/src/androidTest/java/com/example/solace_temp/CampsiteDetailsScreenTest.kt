@@ -15,6 +15,7 @@ import com.example.solace_temp.models.*
 import com.example.solace_temp.ui.screens.CampsiteDetailsScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,6 +53,9 @@ class CampsiteDetailsScreenTest {
         override suspend fun createReservation(campsiteId: String, notificationId: String, startDate: String, endDate: String): Boolean = error("Not used in this test")
         override fun removeCampsiteAsAdmin(campsiteId: String) {}
         override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {}
+        override fun updateCampsite(campsite: Campsite) {
+            _campsites.value = _campsites.value.map { if (it.id == campsite.id) campsite else it }
+        }
     }
 
     @Test
@@ -134,5 +138,58 @@ class CampsiteDetailsScreenTest {
         composeTestRule.onNodeWithText("Share / Save QR Code")
             .performScrollTo()
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun ownerEditsCampsite_showsPopUpValidatesAndDisplaysSuccess() {
+        val fakeRepo = FakeAppRepository()
+        fakeRepo._currentProfile.value = Profile(
+            deviceId = "owner-123",
+            role = UserRole.CAMPSITE_OWNER,
+            isAdmin = false
+        )
+        val campsite = Campsite(
+            id = "camp-1",
+            ownerId = "owner-123",
+            name = "Original Campsite Name",
+            description = "Original description",
+            location = Geolocation(50.0, -110.0, "Banff"),
+            maxOccupancy = 4,
+            pricePerNight = 50.0
+        )
+        fakeRepo._campsites.value = listOf(campsite)
+
+        composeTestRule.setContent {
+            CampsiteDetailsScreen(
+                campsiteId = "camp-1",
+                repository = fakeRepo,
+                onBack = {}
+            )
+        }
+
+        // Click Edit button under Owner Management
+        composeTestRule.onNodeWithContentDescription("Edit Details").performScrollTo().performClick()
+
+        // Verify pop-up is displayed
+        composeTestRule.onNodeWithText("Edit Campsite Details").assertIsDisplayed()
+
+        // Test validation: clear name field
+        composeTestRule.onNodeWithText("Campsite Name (Required)").performTextClearance()
+        composeTestRule.onNodeWithText("Save Changes").performClick()
+        composeTestRule.onNodeWithText("Error: Campsite name cannot be empty.").assertIsDisplayed()
+
+        // Enter valid new details
+        composeTestRule.onNodeWithText("Campsite Name (Required)").performTextInput("Updated Campsite Name")
+        composeTestRule.onNodeWithText("Save Changes").performClick()
+
+        // Verify pop-up transitions to success view
+        composeTestRule.onNodeWithText("Campsite Updated").assertIsDisplayed()
+        composeTestRule.onNodeWithText("All campsite information for \"Updated Campsite Name\" has been successfully edited and updated.").assertIsDisplayed()
+
+        // Click Done
+        composeTestRule.onNodeWithText("Done").performClick()
+
+        // Verify repository state updated
+        assertEquals("Updated Campsite Name", fakeRepo._campsites.value.first().name)
     }
 }

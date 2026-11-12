@@ -9,6 +9,7 @@
  */
 package com.example.solace_temp.data
 
+import android.net.Uri
 import com.example.solace_temp.models.*
 import com.example.solace_temp.validation.WaitingListException
 import com.example.solace_temp.validation.WaitingListRules
@@ -87,11 +88,67 @@ interface AppRepository {
     fun createCampsite(campsite: Campsite): Campsite
 
     /**
+     * Updates an existing campsite's details in the repository.
+     * @param campsite The updated [Campsite] details to persist.
+     */
+    fun updateCampsite(campsite: Campsite) {}
+
+    /**
+     * Updates a campsite and reports the result via callback.
+     * @param campsite The updated [Campsite] details to persist.
+     * @param onResult Receives success or failure when saving finishes.
+     */
+    fun updateCampsite(
+        campsite: Campsite,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val result = runCatching {
+            updateCampsite(campsite)
+        }
+        onResult(result)
+    }
+
+    /**
+     * Uploads a campsite image file/media URI to storage and returns the download URL.
+     * @param campsiteId The unique ID of the campsite.
+     * @param imageUri The local device Uri of the image file to upload.
+     * @param onResult Receives the download URL String on success or Throwable on failure.
+     */
+    fun uploadCampsiteImage(
+        campsiteId: String,
+        imageUri: Uri,
+        onResult: (Result<String>) -> Unit
+    ) {
+        onResult(Result.success(imageUri.toString()))
+    }
+
+    /**
      * Creates a new lottery for one or more campsites.
      * @param lottery The [Lottery] configuration to create.
      * @return The newly created [Lottery].
      */
     fun createLottery(lottery: Lottery): Lottery
+
+    /**
+     * Updates an existing lottery configuration in the repository.
+     * @param lottery The updated [Lottery] configuration to save.
+     */
+    fun updateLottery(lottery: Lottery) {}
+
+    /**
+     * Updates an existing lottery configuration and reports the result via callback.
+     * @param lottery The updated [Lottery] configuration to save.
+     * @param onResult Receives success or failure when saving finishes.
+     */
+    fun updateLottery(
+        lottery: Lottery,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val result = runCatching {
+            updateLottery(lottery)
+        }
+        onResult(result)
+    }
     
     /**
      * Adds an entrant to a lottery's waiting list.
@@ -336,12 +393,35 @@ object MockAppRepository : AppRepository {
         return newSite
     }
 
+    /** Updates an existing campsite in the mock state list. */
+    override fun updateCampsite(campsite: Campsite) {
+        _campsites.update { list ->
+            list.map { if (it.id == campsite.id) campsite else it }
+        }
+    }
+
+    /** Simulates uploading a campsite image in mock mode by returning the URI string. */
+    override fun uploadCampsiteImage(
+        campsiteId: String,
+        imageUri: Uri,
+        onResult: (Result<String>) -> Unit
+    ) {
+        onResult(Result.success(imageUri.toString()))
+    }
+
     /** Creates a new mock lottery and appends it to the mock state list. */
     override fun createLottery(lottery: Lottery): Lottery {
         val newId = if (lottery.id.isBlank()) "lot-${UUID.randomUUID().toString().take(6)}" else lottery.id
         val newLottery = lottery.copy(id = newId)
         _lotteries.update { it + newLottery }
         return newLottery
+    }
+
+    /** Updates an existing mock lottery in the mock state list. */
+    override fun updateLottery(lottery: Lottery) {
+        _lotteries.update { list ->
+            list.map { if (it.id == lottery.id) lottery else it }
+        }
     }
 
     /** Simulates a user joining the waiting list for a mock lottery. */
