@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.example.solace_temp.data.AppRepository
 import com.example.solace_temp.models.*
+import com.example.solace_temp.data.CampsiteFilter
 import com.example.solace_temp.validation.ProfileValidator
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
@@ -645,12 +646,13 @@ fun CampsiteDetailsScreen(
 // CAMPSITE LIST SCREEN (Used by Entrant Search & Owner My Campsites)
 // =========================================================================
 /**
- * Composable screen to display a list of campsites, with a search filter.
- * 
+ * Composable screen to display a list of campsites with location, date, and guest filters.
+ *
  * @param title The title text for this screen.
  * @param repository The data repository for fetching campsite data.
  * @param onSelectCampsite Callback invoked when a campsite is tapped, receiving the campsite ID.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CampsiteListScreen(
     title: String,
@@ -658,11 +660,57 @@ fun CampsiteListScreen(
     onSelectCampsite: (String) -> Unit
 ) {
     val campsites by repository.campsites.collectAsState()
-    var searchQuery by remember { mutableStateOf("") }
+    var locationQuery by remember { mutableStateOf("") }
+    var guestCountInput by remember { mutableStateOf("") }
+    var startDateMillis by remember { mutableStateOf<Long?>(null) }
+    var endDateMillis by remember { mutableStateOf<Long?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
-    val filtered = campsites.filter {
-        it.name.contains(searchQuery, ignoreCase = true) ||
-                it.location.locationName.contains(searchQuery, ignoreCase = true)
+    val minGuests = guestCountInput.toIntOrNull()
+    val hasActiveFilters = locationQuery.isNotBlank() ||
+            minGuests != null ||
+            startDateMillis != null ||
+            endDateMillis != null
+
+    val filtered = remember(campsites, locationQuery, startDateMillis, endDateMillis, minGuests) {
+        CampsiteFilter.filter(
+            campsites = campsites,
+            locationQuery = locationQuery,
+            startDateMillis = startDateMillis,
+            endDateMillis = endDateMillis,
+            minGuests = minGuests
+        )
+    }
+
+    if (showDatePicker) {
+        val dateRangeState = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = startDateMillis,
+            initialSelectedEndDateMillis = endDateMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        startDateMillis = dateRangeState.selectedStartDateMillis
+                        endDateMillis = dateRangeState.selectedEndDateMillis
+                        showDatePicker = false
+                    }
+                ) {
+                    Text("Apply Dates")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DateRangePicker(
+                state = dateRangeState,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 
     Column(
@@ -671,52 +719,151 @@ fun CampsiteListScreen(
             .background(Color(0xFFEDE8F8))
             .padding(16.dp)
     ) {
-        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            label = { Text("Search by name or Alberta park...") },
+        Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            if (hasActiveFilters) {
+                TextButton(
+                    onClick = {
+                        locationQuery = ""
+                        guestCountInput = ""
+                        startDateMillis = null
+                        endDateMillis = null
+                    },
+                    modifier = Modifier.testTag("clear_filters_button")
+                ) {
+                    Text("Clear Filters", color = Color(0xFFE11D48), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        OutlinedTextField(
+            value = locationQuery,
+            onValueChange = { locationQuery = it },
+            label = { Text("Location or Alberta park...") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("filter_location_input"),
             singleLine = true
         )
-        Spacer(Modifier.height(12.dp))
-        if (filtered.isEmpty()) {
-            Text(
-                text = if (searchQuery.isBlank())
-                    "No campsites available."
-                else
-                    "No campsites found.",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(16.dp)
+
+        Spacer(Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = { showDatePicker = true },
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1.4f)
+                    .height(56.dp)
+                    .testTag("filter_date_button")
+            ) {
+                Icon(Icons.Default.DateRange, contentDescription = "Select Dates", modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                val dateLabel = when {
+                    startDateMillis != null && endDateMillis != null ->
+                        "${formatDateMillis(startDateMillis)} - ${formatDateMillis(endDateMillis)}"
+                    startDateMillis != null -> formatDateMillis(startDateMillis)
+                    else -> "Any Dates"
+                }
+                Text(text = dateLabel, maxLines = 1)
+            }
+
+            OutlinedTextField(
+                value = guestCountInput,
+                onValueChange = { input ->
+                    if (input.all { it.isDigit() } && input.length <= 2) {
+                        guestCountInput = input
+                    }
+                },
+                label = { Text("Guests") },
+                modifier = Modifier
+                    .weight(0.8f)
+                    .testTag("filter_guests_input"),
+                singleLine = true
             )
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(filtered) { site ->
-                val ratingLabel = if (site.rating > 0.0) {
-                    "★ ${site.rating}"
-                } else {
-                    "Not yet rated"
-                }
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+
+        Spacer(Modifier.height(12.dp))
+
+        if (filtered.isEmpty()) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("empty_filter_message")
+            ) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onSelectCampsite(site.id) }
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(site.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("$${site.pricePerNight.toInt()}/night", color = Color(0xFFE11D48), fontWeight = FontWeight.Bold)
-                        }
+                    Text(
+                        text = if (hasActiveFilters) {
+                            "No campsites match your selected filters."
+                        } else {
+                            "No campsites available."
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center
+                    )
+                    if (hasActiveFilters) {
                         Text(
-                            "📍 ${site.location.locationName} · " + "Max ${site.maxOccupancy} guests · $ratingLabel")
-                        Spacer(Modifier.height(4.dp))
-                        Text("Tap to view details & QR code →", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                            text = "Try adjusting your location, dates, or guest count, or clear all filters.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(filtered, key = { it.id }) { site ->
+                    val ratingLabel = if (site.rating > 0.0) {
+                        "★ ${site.rating}"
+                    } else {
+                        "Not yet rated"
+                    }
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectCampsite(site.id) }
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(site.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("$${site.pricePerNight.toInt()}/night", color = Color(0xFFE11D48), fontWeight = FontWeight.Bold)
+                            }
+                            Text(
+                                "📍 ${site.location.locationName} · Max ${site.maxOccupancy} guests · $ratingLabel"
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text("Tap to view details & QR code →", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                        }
                     }
                 }
             }
