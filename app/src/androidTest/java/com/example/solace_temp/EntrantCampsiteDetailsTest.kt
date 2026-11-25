@@ -171,10 +171,10 @@ class EntrantCampsiteDetailsTest {
         composeTestRule.onNodeWithText("Availability & Schedule").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("• 2027-06-15").performScrollTo().assertIsDisplayed()
 
-        // Verify Active Lottery Status & Deadline
+        // Verify Active Lottery Status & Registration Window
         composeTestRule.onNodeWithText("Active Lottery Listing").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Name: Summer Peak Lottery").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Registration Deadline: 2027-05-15").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Registration Window: 2027-05-01 to 2027-05-15").performScrollTo().assertIsDisplayed()
     }
 
     @Test

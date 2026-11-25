@@ -151,6 +151,7 @@ class FirestoreAppRepository(context: Context) : AppRepository {
             }
             _lotteryLoadError.value = null
             _lotteries.value = snapshot.toObjects(Lottery::class.java)
+            triggerExpiredLotteryDraws()
         }
     }
 
@@ -564,8 +565,15 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     /** Performs a random draw for the specified lottery and updates Firestore with winners. */
     override fun drawLotteryWinners(lotteryId: String) {
         val lottery = _lotteries.value.find { it.id == lotteryId } ?: return
+        if (lottery.isDrawn && lottery.invitedWinnerIds.isNotEmpty()) {
+            return
+        }
         val count = minOf(lottery.waitingListEntrantIds.size, lottery.maxWinners)
         val winners = lottery.waitingListEntrantIds.shuffled().take(count)
+
+        _lotteries.update { list ->
+            list.map { if (it.id == lotteryId) it.copy(invitedWinnerIds = winners, isDrawn = true) else it }
+        }
 
         db.collection("lotteries").document(lotteryId).update(
             mapOf(
@@ -573,6 +581,8 @@ class FirestoreAppRepository(context: Context) : AppRepository {
                 "isDrawn" to true
             )
         )
+
+        sendWinnerNotifications(lottery, winners)
     }
 
     /** Redraws or picks backup winners from remaining waitlist in Firestore. */
@@ -580,8 +590,13 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         val lottery = _lotteries.value.find { it.id == lotteryId } ?: return
         val remaining = lottery.waitingListEntrantIds.filter { id -> id !in lottery.invitedWinnerIds }
         val needed = lottery.maxWinners - lottery.invitedWinnerIds.size
+        if (needed <= 0) return
         val newWinners = remaining.shuffled().take(needed)
         val updatedWinners = lottery.invitedWinnerIds + newWinners
+
+        _lotteries.update { list ->
+            list.map { if (it.id == lotteryId) it.copy(invitedWinnerIds = updatedWinners, isDrawn = true) else it }
+        }
 
         db.collection("lotteries").document(lotteryId).update(
             mapOf(
@@ -589,6 +604,40 @@ class FirestoreAppRepository(context: Context) : AppRepository {
                 "isDrawn" to true
             )
         )
+
+        sendWinnerNotifications(lottery, newWinners)
+    }
+
+    override fun triggerExpiredLotteryDraws() {
+        val now = System.currentTimeMillis()
+        val expired = _lotteries.value.filter { lottery ->
+            val endMillis = lottery.registrationEndMillis
+            endMillis != null && endMillis <= now && !lottery.isDrawn
+        }
+        expired.forEach { lottery ->
+            drawLotteryWinners(lottery.id)
+        }
+    }
+
+    private fun sendWinnerNotifications(lottery: Lottery, winnerIds: List<String>) {
+        if (winnerIds.isEmpty()) return
+        val campsiteId = lottery.campsiteIds.firstOrNull().orEmpty()
+        val campsiteName = _campsites.value.find { it.id == campsiteId }?.name ?: lottery.name
+
+        winnerIds.forEach { winnerId ->
+            val notifId = "notif-${lottery.id}-$winnerId"
+            val notification = AppNotification(
+                id = notifId,
+                recipientId = winnerId,
+                senderId = lottery.ownerId,
+                campsiteId = campsiteId,
+                title = "You won the lottery!",
+                message = "$campsiteName · A spot is yours! Accept your invitation to confirm your campsite dates.",
+                timestamp = "Just now",
+                isLotteryWin = true
+            )
+            db.collection("notifications").document(notifId).set(notification)
+        }
     }
 
     /** Removes a specific campsite from Firestore. */
@@ -637,6 +686,22 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         } catch (e: Exception) {
             Log.e("FirestoreRepo", "Error creating reservation", e)
             false
+        }
+    }
+
+    /**
+     * Marks specified notifications as seen in Firestore and updates the local state.
+     *
+     * @param notificationIds List of notification IDs to mark as seen.
+     */
+    override fun markNotificationsAsSeen(notificationIds: List<String>) {
+        if (notificationIds.isEmpty()) return
+        val targetIds = notificationIds.toSet()
+        _notifications.update { list ->
+            list.map { if (it.id in targetIds) it.copy(isSeen = true) else it }
+        }
+        targetIds.forEach { id ->
+            db.collection("notifications").document(id).update("isSeen", true)
         }
     }
 

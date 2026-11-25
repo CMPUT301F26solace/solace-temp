@@ -115,7 +115,8 @@ class LotterySystemAndRedrawTest {
         ))
         override val reservations: StateFlow<List<Reservation>> = _reservations
 
-        override val notifications: StateFlow<List<AppNotification>> = MutableStateFlow(emptyList())
+        private val _notifications = MutableStateFlow<List<AppNotification>>(emptyList())
+        override val notifications: StateFlow<List<AppNotification>> = _notifications
 
         override fun switchRole(newRole: UserRole) {}
         override fun updateProfile(profile: Profile) {}
@@ -129,24 +130,59 @@ class LotterySystemAndRedrawTest {
         override fun leaveWaitingList(lotteryId: String, entrantId: String) {}
 
         override fun drawLotteryWinners(lotteryId: String) {
+            val target = _lotteries.value.find { it.id == lotteryId } ?: return
+            if (target.isDrawn && target.invitedWinnerIds.isNotEmpty()) {
+                return
+            }
+            val count = minOf(target.waitingListEntrantIds.size, target.maxWinners)
+            val winners = target.waitingListEntrantIds.shuffled().take(count)
             _lotteries.value = _lotteries.value.map { lot ->
                 if (lot.id == lotteryId) {
-                    val count = minOf(lot.waitingListEntrantIds.size, lot.maxWinners)
-                    val winners = lot.waitingListEntrantIds.shuffled().take(count)
                     lot.copy(invitedWinnerIds = winners, isDrawn = true)
                 } else lot
             }
+            val campsiteId = target.campsiteIds.firstOrNull().orEmpty()
+            val newNotifs = winners.mapNotNull { winnerId ->
+                val notifId = "notif-${target.id}-$winnerId"
+                if (_notifications.value.any { it.id == notifId }) null
+                else AppNotification(
+                    id = notifId,
+                    recipientId = winnerId,
+                    senderId = target.ownerId,
+                    campsiteId = campsiteId,
+                    title = "You won the lottery!",
+                    message = "${target.name} · A spot is yours!",
+                    isLotteryWin = true
+                )
+            }
+            _notifications.value = _notifications.value + newNotifs
         }
 
         override fun redrawLottery(lotteryId: String) {
+            val target = _lotteries.value.find { it.id == lotteryId } ?: return
+            val remaining = target.waitingListEntrantIds.filter { it !in target.invitedWinnerIds }
+            val needed = target.maxWinners - target.invitedWinnerIds.size
+            val newWinners = remaining.shuffled().take(needed)
             _lotteries.value = _lotteries.value.map { lot ->
                 if (lot.id == lotteryId) {
-                    val remaining = lot.waitingListEntrantIds.filter { it !in lot.invitedWinnerIds }
-                    val needed = lot.maxWinners - lot.invitedWinnerIds.size
-                    val newWinners = remaining.shuffled().take(needed)
                     lot.copy(invitedWinnerIds = lot.invitedWinnerIds + newWinners, isDrawn = true)
                 } else lot
             }
+            val campsiteId = target.campsiteIds.firstOrNull().orEmpty()
+            val newNotifs = newWinners.mapNotNull { winnerId ->
+                val notifId = "notif-${target.id}-$winnerId"
+                if (_notifications.value.any { it.id == notifId }) null
+                else AppNotification(
+                    id = notifId,
+                    recipientId = winnerId,
+                    senderId = target.ownerId,
+                    campsiteId = campsiteId,
+                    title = "You won the lottery!",
+                    message = "${target.name} · A spot is yours!",
+                    isLotteryWin = true
+                )
+            }
+            _notifications.value = _notifications.value + newNotifs
         }
 
         override suspend fun createReservation(campsiteId: String, notificationId: String, startDate: String, endDate: String): Boolean = error("Not used in this test")
@@ -177,6 +213,15 @@ class LotterySystemAndRedrawTest {
         assertTrue(lotteryAfterDraw.isDrawn)
         assertTrue(lotteryAfterDraw.invitedWinnerIds.isNotEmpty())
         assertTrue(lotteryAfterDraw.invitedWinnerIds.size <= lotteryAfterDraw.maxWinners)
+
+        // Verify notifications were created for drawn winners
+        val winnerNotifs = repo.notifications.value.filter { it.isLotteryWin }
+        assertEquals(lotteryAfterDraw.invitedWinnerIds.size, winnerNotifs.size)
+
+        // Verify duplicate notifications are avoided on re-draw
+        val countBeforeRedraw = repo.notifications.value.size
+        repo.drawLotteryWinners(lotteryId)
+        assertEquals(countBeforeRedraw, repo.notifications.value.size)
 
         // Perform redraw / backup draw
         repo.redrawLottery(lotteryId)

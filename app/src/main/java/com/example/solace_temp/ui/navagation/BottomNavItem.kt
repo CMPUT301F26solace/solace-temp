@@ -28,9 +28,6 @@ sealed class BottomNavItem(val route: String, val label: String, val icon: Image
     /** Navigation item for the Owner's Create Campsite view. */
     object OwnerCreate : BottomNavItem("owner_create", "Create", Icons.Default.AddCircleOutline)
     
-    /** Navigation item for the Owner's Entrants list view. */
-    object OwnerEntrants : BottomNavItem("owner_entrants", "Entrants", Icons.Default.Group)
-    
     /** Navigation item for the Owner's Lottery management view. */
     object OwnerLottery : BottomNavItem("owner_lottery", "Lottery", Icons.Default.Shuffle)
 
@@ -69,7 +66,6 @@ fun getBottomNavItemsForRole(role: UserRole): List<BottomNavItem> {
         UserRole.CAMPSITE_OWNER -> listOf(
             BottomNavItem.OwnerCampsites,
             BottomNavItem.OwnerCreate,
-            BottomNavItem.OwnerEntrants,
             BottomNavItem.OwnerLottery,
             BottomNavItem.ProfileTab
         )

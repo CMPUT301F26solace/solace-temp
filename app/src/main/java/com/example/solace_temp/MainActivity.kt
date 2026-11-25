@@ -9,9 +9,12 @@
  */
 package com.example.solace_temp
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -54,6 +57,8 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import com.example.solace_temp.models.UserRole
+import com.example.solace_temp.util.SystemNotificationHelper
 
 /**
  * Main entry point of the Solace application.
@@ -95,6 +100,53 @@ fun SolaceCampsiteApp() {
     val navController = rememberNavController()
     val navItems = getBottomNavItemsForRole(profile.role)
     val scope = rememberCoroutineScope()
+
+    val lotteries by repository.lotteries.collectAsState()
+    val notifications by repository.notifications.collectAsState()
+
+    val entrantNotifications = notifications.filter {
+        it.recipientId.isBlank() || it.recipientId == profile.deviceId
+    }
+    val unseenCount = if (profile.role == UserRole.ENTRANT) {
+        entrantNotifications.count { !it.isSeen }
+    } else {
+        0
+    }
+
+    // Request notification runtime permission on Android 13+ (API 33+)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { /* no-op */ }
+        LaunchedEffect(Unit) {
+            permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    // Track posted notification IDs to prevent duplicate status-bar alerts
+    var postedSystemNotificationIds by remember { mutableStateOf(setOf<String>()) }
+    LaunchedEffect(entrantNotifications) {
+        val newlyArrivedWins = entrantNotifications.filter {
+            it.isLotteryWin && it.id !in postedSystemNotificationIds
+        }
+        if (newlyArrivedWins.isNotEmpty()) {
+            newlyArrivedWins.forEach { notif ->
+                SystemNotificationHelper.postLotteryWinNotification(context, notif)
+            }
+            postedSystemNotificationIds = postedSystemNotificationIds + newlyArrivedWins.map { it.id }
+        }
+    }
+
+    // Automatically check and trigger expired lottery draws on launch/session start, when lotteries update, and periodically
+    LaunchedEffect(lotteries) {
+        repository.triggerExpiredLotteryDraws()
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(10_000L)
+            repository.triggerExpiredLotteryDraws()
+        }
+    }
 
     // Automatically jump to the first tab of the new role when switching roles
     LaunchedEffect(profile.role) {
@@ -145,11 +197,29 @@ fun SolaceCampsiteApp() {
                                 }
                             },
                             icon = { 
-                                Icon(
-                                    item.icon, 
-                                    contentDescription = item.label,
-                                    modifier = Modifier.scale(scale)
-                                ) 
+                                if (item == BottomNavItem.EntrantNotifications && unseenCount > 0) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge {
+                                                Text(
+                                                    text = if (unseenCount > 99) "99+" else unseenCount.toString()
+                                                )
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            item.icon, 
+                                            contentDescription = item.label,
+                                            modifier = Modifier.scale(scale)
+                                        ) 
+                                    }
+                                } else {
+                                    Icon(
+                                        item.icon, 
+                                        contentDescription = item.label,
+                                        modifier = Modifier.scale(scale)
+                                    ) 
+                                }
                             },
                             label = { 
                                 Text(
@@ -272,7 +342,9 @@ fun SolaceCampsiteApp() {
                     OwnerCampsitesScreen(
                         repository = repository,
                         onSelectCampsite = { id -> navController.navigate("campsite_details/$id") },
-                        onCreateNew = { navController.navigate(BottomNavItem.OwnerCreate.route) }
+                        onCreateNew = { navController.navigate(BottomNavItem.OwnerCreate.route) },
+                        onOpenCalendar = { navController.navigate(AppScreen.OwnerCalendar.route) },
+                        onOpenReservations = { navController.navigate(AppScreen.OwnerReservations.route) }
                     )
                 }
                 composable(BottomNavItem.OwnerCreate.route) {
@@ -281,16 +353,12 @@ fun SolaceCampsiteApp() {
                         onCreated = { id -> navController.navigate("campsite_details/$id") }
                     )
                 }
-                composable(BottomNavItem.OwnerEntrants.route) {
-                    OwnerLotteriesScreen(
-                        repository = repository,
-                        onSelectLottery = { id -> navController.navigate("owner_waitlist/$id") }
-                    )
-                }
                 composable(BottomNavItem.OwnerLottery.route) {
                     OwnerLotteriesScreen(
                         repository = repository,
-                        onSelectLottery = { lotteryId -> navController.navigate("lottery_details/$lotteryId") }
+                        onSelectLottery = { lotteryId -> navController.navigate("lottery_details/$lotteryId") },
+                        onOpenCalendar = { navController.navigate(AppScreen.OwnerCalendar.route) },
+                        onOpenReservations = { navController.navigate(AppScreen.OwnerReservations.route) }
                     )
                 }
                 composable("lottery_details/{lotteryId}") { backStackEntry ->
@@ -311,13 +379,13 @@ fun SolaceCampsiteApp() {
                     )
                 }
 
-                composable("owner_reservations") {
+                composable(AppScreen.OwnerReservations.route) {
                     OwnerReservationsScreen(
                         repository = repository,
                         onBack = { navController.popBackStack() }
                     )
                 }
-                composable("owner_calendar") {
+                composable(AppScreen.OwnerCalendar.route) {
                     OwnerCalendarScreen(
                         repository = repository,
                         onBack = { navController.popBackStack() }
@@ -369,7 +437,21 @@ fun SolaceCampsiteApp() {
                         campsiteId = campsiteId,
                         repository = repository,
                         onBack = { navController.popBackStack() },
-                        onSelectLottery = { lotteryId -> navController.navigate("lottery_details/$lotteryId") }
+                        onSelectLottery = { lotteryId ->
+                            if (profile.role == UserRole.ENTRANT) {
+                                navController.navigate("entrant_lottery_details/$lotteryId")
+                            } else {
+                                navController.navigate("lottery_details/$lotteryId")
+                            }
+                        }
+                    )
+                }
+                composable("entrant_lottery_details/{lotteryId}") { backStackEntry ->
+                    val lotteryId = backStackEntry.arguments?.getString("lotteryId") ?: ""
+                    EntrantLotteryPlaceholderScreen(
+                        lotteryId = lotteryId,
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
                     )
                 }
             }

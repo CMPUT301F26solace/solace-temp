@@ -212,6 +212,43 @@ class CampsiteLotteryCreationTest {
     }
 
     @Test
+    fun createLotteryDialog_hidesCampsitesAlreadyInADrawnBookingLottery() {
+        val fakeRepo = LotteryFakeRepository()
+        val camp1 = Campsite(id = "camp-1", ownerId = "owner-lottery-test", name = "Available Camp")
+        val camp2 = Campsite(id = "camp-2", ownerId = "owner-lottery-test", name = "Drawn Occupied Camp")
+        fakeRepo._campsites.value = listOf(camp1, camp2)
+
+        val now = System.currentTimeMillis()
+        val drawnLottery = Lottery(
+            id = "drawn-lot",
+            name = "Drawn Lottery",
+            campsiteIds = listOf("camp-2"),
+            ownerId = "owner-lottery-test",
+            registrationStartMillis = now - 100000L,
+            registrationEndMillis = now - 50000L,
+            bookingStartMillis = now + 86400000L,
+            bookingEndMillis = now + 10 * 86400000L,
+            isDrawn = true
+        )
+        fakeRepo._lotteries.value = listOf(drawnLottery)
+
+        composeTestRule.setContent {
+            CreateLotteryDialog(
+                campsite = camp1,
+                repository = fakeRepo,
+                onDismiss = {},
+                onSuccess = {}
+            )
+        }
+
+        // Available Camp should be shown in assigned campsites list
+        composeTestRule.onNodeWithText("Available Camp (Max Guests: 4)").performScrollTo().assertIsDisplayed()
+
+        // Drawn Occupied Camp should NOT be displayed
+        composeTestRule.onNodeWithText("Drawn Occupied Camp (Max Guests: 4)").assertDoesNotExist()
+    }
+
+    @Test
     fun campsiteListScreen_displaysMultiLotteryLabel_forMultiCampsiteLotteries() {
         val fakeRepo = LotteryFakeRepository()
         val camp1 = Campsite(id = "c1", ownerId = "owner-lottery-test", name = "First Camp")
