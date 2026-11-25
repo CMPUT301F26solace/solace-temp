@@ -12,6 +12,7 @@ package com.example.solace_temp.data
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.net.Uri
 import android.provider.Settings
 import android.util.Log
 import com.example.solace_temp.models.*
@@ -19,9 +20,11 @@ import com.example.solace_temp.validation.WaitingListException
 import com.example.solace_temp.validation.WaitingListRules
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
@@ -216,12 +219,139 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         return newSite
     }
 
+    /**
+     * Updates an existing campsite's details in Firestore and updates the local state flow.
+     * @param campsite The updated [Campsite] object to save.
+     */
+    override fun updateCampsite(campsite: Campsite) {
+        if (campsite.id.isNotBlank()) {
+            _campsites.update { list ->
+                list.map { if (it.id == campsite.id) campsite else it }
+            }
+            db.collection("campsites").document(campsite.id).set(campsite)
+                .addOnSuccessListener {
+                    Log.d("FirestoreRepo", "Campsite updated successfully: ${campsite.id}")
+                }
+                .addOnFailureListener { error ->
+                    Log.e("FirestoreRepo", "Campsite update failed", error)
+                }
+        }
+    }
+
+    /**
+     * Updates an existing campsite's details in Firestore with result reporting.
+     * @param campsite The updated [Campsite] object to save.
+     * @param onResult Receives success or failure when saving finishes.
+     */
+    override fun updateCampsite(
+        campsite: Campsite,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        if (campsite.id.isBlank()) {
+            onResult(Result.failure(IllegalArgumentException("Campsite ID cannot be empty")))
+            return
+        }
+        _campsites.update { list ->
+            list.map { if (it.id == campsite.id) campsite else it }
+        }
+        db.collection("campsites").document(campsite.id).set(campsite)
+            .addOnSuccessListener {
+                onResult(Result.success(Unit))
+            }
+            .addOnFailureListener { error ->
+                Log.e("FirestoreRepo", "Campsite update failed", error)
+                onResult(Result.failure(error))
+            }
+    }
+
+    /**
+     * Uploads a campsite image file/media URI to Firebase Storage and returns the public download URL.
+     * @param campsiteId The ID of the campsite.
+     * @param imageUri The Uri of the local image file to upload.
+     * @param onResult Callback receiving Result with the download URL String on success or Throwable on failure.
+     */
+    override fun uploadCampsiteImage(
+        campsiteId: String,
+        imageUri: Uri,
+        onResult: (Result<String>) -> Unit
+    ) {
+        try {
+            val storageRef = FirebaseStorage.getInstance()
+                .reference.child("campsites/${campsiteId}_${System.currentTimeMillis()}.jpg")
+            storageRef.putFile(imageUri)
+                .continueWithTask { task ->
+                    if (!task.isSuccessful) {
+                        task.exception?.let { throw it }
+                    }
+                    storageRef.downloadUrl
+                }
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful && task.result != null) {
+                        val downloadUrl = task.result.toString()
+                        onResult(Result.success(downloadUrl))
+                    } else {
+                        val exc = task.exception ?: Exception("Failed to get image download URL")
+                        Log.e("FirestoreRepo", "Image upload failed", exc)
+                        onResult(Result.failure(exc))
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("FirestoreRepo", "Image upload exception", e)
+            onResult(Result.failure(e))
+        }
+    }
+
     /** Creates a new lottery in Firestore. */
     override fun createLottery(lottery: Lottery): Lottery {
         val newId = if (lottery.id.isBlank()) "lot-${UUID.randomUUID().toString().take(6)}" else lottery.id
         val newLottery = lottery.copy(id = newId, ownerId = deviceId)
         db.collection("lotteries").document(newId).set(newLottery)
         return newLottery
+    }
+
+    /**
+     * Updates an existing lottery configuration in Firestore and updates the local state flow.
+     * @param lottery The updated [Lottery] configuration to save.
+     */
+    override fun updateLottery(lottery: Lottery) {
+        if (lottery.id.isNotBlank()) {
+            _lotteries.update { list ->
+                list.map { if (it.id == lottery.id) lottery else it }
+            }
+            db.collection("lotteries").document(lottery.id).set(lottery)
+                .addOnSuccessListener {
+                    Log.d("FirestoreRepo", "Lottery updated successfully: ${lottery.id}")
+                }
+                .addOnFailureListener { error ->
+                    Log.e("FirestoreRepo", "Lottery update failed", error)
+                }
+        }
+    }
+
+    /**
+     * Updates an existing lottery in Firestore with callback response.
+     * @param lottery The updated [Lottery] configuration to save.
+     * @param onResult Receives success or failure when saving finishes.
+     */
+    override fun updateLottery(
+        lottery: Lottery,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        if (lottery.id.isBlank()) {
+            onResult(Result.failure(IllegalArgumentException("Lottery ID cannot be empty")))
+            return
+        }
+        _lotteries.update { list ->
+            list.map { if (it.id == lottery.id) lottery else it }
+        }
+        db.collection("lotteries").document(lottery.id).set(lottery)
+            .addOnSuccessListener {
+                onResult(Result.success(Unit))
+            }
+            .addOnFailureListener { error ->
+                Log.e("FirestoreRepo", "Lottery update failed", error)
+                onResult(Result.failure(error))
+            }
     }
 
     /** Adds the given entrant to the waiting list of a specific lottery in Firestore. */
