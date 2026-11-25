@@ -214,3 +214,42 @@ data class AppNotification(
     val timestamp: String = "Today · 9:12 AM",
     val isLotteryWin: Boolean = false
 )
+
+/**
+ * Enum defining the delivery status of a direct message between owner and entrant.
+ */
+enum class MessageDeliveryStatus {
+    SENT, DELIVERED, READ
+}
+
+/**
+ * Represents a direct message sent between a campsite owner and an entrant with a reservation.
+ */
+data class OwnerEntrantMessage(
+    val id: String = "",
+    val ownerId: String = "",
+    val ownerName: String = "",
+    val entrantId: String = "",
+    val entrantName: String = "",
+    val campsiteId: String = "",
+    val campsiteName: String = "",
+    val reservationId: String = "",
+    val reservationStatus: ReservationStatus = ReservationStatus.ACTIVE,
+    val messageText: String = "",
+    val timestampMillis: Long = System.currentTimeMillis(),
+    val status: MessageDeliveryStatus = MessageDeliveryStatus.READ
+)
+
+/**
+ * Represents an audit record of an administrator accessing communication logs.
+ */
+data class AdminAuditAccessLog(
+    val id: String = "",
+    val adminId: String = "",
+    val adminName: String = "",
+    val targetReservationId: String = "",
+    val targetOwnerId: String = "",
+    val targetEntrantId: String = "",
+    val timestampMillis: Long = System.currentTimeMillis(),
+    val actionDescription: String = "Reviewed conversation thread history"
+)

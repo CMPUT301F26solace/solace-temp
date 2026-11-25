@@ -348,7 +348,10 @@ fun SolaceCampsiteApp() {
                     )
                 }
                 composable(BottomNavItem.AdminLogs.route) {
-                    TeammatePlaceholderScreen("Admin: Notification & Message Logs", "US 03.08.01, US 03.12.01")
+                    AdminMessageLogsScreen(
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
+                    )
                 }
 
                 // SHARED PROFILE & CAMPSITE DETAILS ROUTES
