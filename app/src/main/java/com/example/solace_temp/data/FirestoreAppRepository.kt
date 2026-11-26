@@ -93,6 +93,77 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     /** Exposes the list of notifications flow. */
     override val notifications: StateFlow<List<AppNotification>> = _notifications.asStateFlow()
 
+    private val _ownerEntrantMessages = MutableStateFlow(
+        listOf(
+            OwnerEntrantMessage(
+                id = "msg-101",
+                ownerId = "owner-8F92",
+                ownerName = "John Campground Owner",
+                entrantId = "entrant-123",
+                entrantName = "Alex Morgan",
+                campsiteId = "camp-banff-01",
+                campsiteName = "Tunnel Mountain Village I",
+                reservationId = "res-banff-1001",
+                reservationStatus = ReservationStatus.ACTIVE,
+                messageText = "Hi Alex, your campsite booking for Tunnel Mountain is confirmed. Please let us know if you need bear locker instructions.",
+                timestampMillis = System.currentTimeMillis() - 86400000L * 2,
+                status = MessageDeliveryStatus.READ
+            ),
+            OwnerEntrantMessage(
+                id = "msg-102",
+                ownerId = "owner-8F92",
+                ownerName = "John Campground Owner",
+                entrantId = "entrant-123",
+                entrantName = "Alex Morgan",
+                campsiteId = "camp-banff-01",
+                campsiteName = "Tunnel Mountain Village I",
+                reservationId = "res-banff-1001",
+                reservationStatus = ReservationStatus.ACTIVE,
+                messageText = "Thanks John! What time is check-in on the first day?",
+                timestampMillis = System.currentTimeMillis() - 86400000L * 2 + 3600000L,
+                status = MessageDeliveryStatus.READ
+            ),
+            OwnerEntrantMessage(
+                id = "msg-201",
+                ownerId = "owner-9999",
+                ownerName = "Sarah Connor",
+                entrantId = "entrant-456",
+                entrantName = "David Miller",
+                campsiteId = "camp-hinton-02",
+                campsiteName = "Hinton-Grande Cache Pines",
+                reservationId = "res-hinton-2002",
+                reservationStatus = ReservationStatus.CANCELLED,
+                messageText = "Notice: Your reservation #res-hinton-2002 was cancelled per your request.",
+                timestampMillis = System.currentTimeMillis() - 86400000L * 5,
+                status = MessageDeliveryStatus.DELIVERED
+            )
+        )
+    )
+
+    override val ownerEntrantMessages: StateFlow<List<OwnerEntrantMessage>> = _ownerEntrantMessages.asStateFlow()
+
+    private val _adminAuditLogs = MutableStateFlow<List<AdminAuditAccessLog>>(emptyList())
+    override val adminAuditLogs: StateFlow<List<AdminAuditAccessLog>> = _adminAuditLogs.asStateFlow()
+
+    override fun logAdminAuditAccess(
+        adminId: String,
+        adminName: String,
+        reservationId: String,
+        ownerId: String,
+        entrantId: String
+    ) {
+        val entry = AdminAuditAccessLog(
+            id = "audit-${UUID.randomUUID().toString().take(8)}",
+            adminId = adminId,
+            adminName = adminName.ifBlank { "Admin" },
+            targetReservationId = reservationId,
+            targetOwnerId = ownerId,
+            targetEntrantId = entrantId,
+            timestampMillis = System.currentTimeMillis()
+        )
+        _adminAuditLogs.update { it + entry }
+    }
+
     init {
         listenToCurrentProfile()
         listenToAllProfiles()

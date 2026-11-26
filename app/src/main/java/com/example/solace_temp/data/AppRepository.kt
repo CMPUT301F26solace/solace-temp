@@ -49,6 +49,23 @@ interface AppRepository {
     /** List of notifications intended for the current user. */
     val notifications: StateFlow<List<AppNotification>>
 
+    /** Direct chat messages sent between campsite owners and reserving entrants. */
+    val ownerEntrantMessages: StateFlow<List<OwnerEntrantMessage>>
+        get() = MutableStateFlow(emptyList())
+
+    /** Administrative audit log recording access to communication logs. */
+    val adminAuditLogs: StateFlow<List<AdminAuditAccessLog>>
+        get() = MutableStateFlow(emptyList())
+
+    /** Logs an administrator reviewing a conversation thread. */
+    fun logAdminAuditAccess(
+        adminId: String,
+        adminName: String,
+        reservationId: String,
+        ownerId: String,
+        entrantId: String
+    ) {}
+
     /**
      * Switches the active role of the current user profile.
      * @param newRole The new [UserRole] to switch to.
@@ -391,6 +408,105 @@ object MockAppRepository : AppRepository {
     
     /** Exposes the mock notifications state. */
     override val notifications: StateFlow<List<AppNotification>> = _notifications.asStateFlow()
+
+    private val _ownerEntrantMessages = MutableStateFlow(
+        listOf(
+            OwnerEntrantMessage(
+                id = "msg-101",
+                ownerId = "owner-8F92",
+                ownerName = "John Campground Owner",
+                entrantId = "entrant-123",
+                entrantName = "Alex Morgan",
+                campsiteId = "camp-banff-01",
+                campsiteName = "Tunnel Mountain Village I",
+                reservationId = "res-banff-1001",
+                reservationStatus = ReservationStatus.ACTIVE,
+                messageText = "Hi Alex, your campsite booking for Tunnel Mountain is confirmed. Please let us know if you need bear locker instructions.",
+                timestampMillis = System.currentTimeMillis() - 86400000L * 2,
+                status = MessageDeliveryStatus.READ
+            ),
+            OwnerEntrantMessage(
+                id = "msg-102",
+                ownerId = "owner-8F92",
+                ownerName = "John Campground Owner",
+                entrantId = "entrant-123",
+                entrantName = "Alex Morgan",
+                campsiteId = "camp-banff-01",
+                campsiteName = "Tunnel Mountain Village I",
+                reservationId = "res-banff-1001",
+                reservationStatus = ReservationStatus.ACTIVE,
+                messageText = "Thanks John! What time is check-in on the first day?",
+                timestampMillis = System.currentTimeMillis() - 86400000L * 2 + 3600000L,
+                status = MessageDeliveryStatus.READ
+            ),
+            OwnerEntrantMessage(
+                id = "msg-103",
+                ownerId = "owner-8F92",
+                ownerName = "John Campground Owner",
+                entrantId = "entrant-123",
+                entrantName = "Alex Morgan",
+                campsiteId = "camp-banff-01",
+                campsiteName = "Tunnel Mountain Village I",
+                reservationId = "res-banff-1001",
+                reservationStatus = ReservationStatus.ACTIVE,
+                messageText = "Check-in starts at 2:00 PM. Gate code is 4821.",
+                timestampMillis = System.currentTimeMillis() - 86400000L * 2 + 7200000L,
+                status = MessageDeliveryStatus.READ
+            ),
+            OwnerEntrantMessage(
+                id = "msg-201",
+                ownerId = "owner-9999",
+                ownerName = "Sarah Connor",
+                entrantId = "entrant-456",
+                entrantName = "David Miller",
+                campsiteId = "camp-hinton-02",
+                campsiteName = "Hinton-Grande Cache Pines",
+                reservationId = "res-hinton-2002",
+                reservationStatus = ReservationStatus.CANCELLED,
+                messageText = "Notice: Your reservation #res-hinton-2002 was cancelled per your request.",
+                timestampMillis = System.currentTimeMillis() - 86400000L * 5,
+                status = MessageDeliveryStatus.DELIVERED
+            ),
+            OwnerEntrantMessage(
+                id = "msg-301",
+                ownerId = "owner-8F92",
+                ownerName = "John Campground Owner",
+                entrantId = "entrant-789",
+                entrantName = "Emily Watson",
+                campsiteId = "camp-banff-01",
+                campsiteName = "Tunnel Mountain Village I",
+                reservationId = "res-banff-3003",
+                reservationStatus = ReservationStatus.INVITED,
+                messageText = "Invitation details for your upcoming stay at Tunnel Mountain Village.",
+                timestampMillis = System.currentTimeMillis() - 86400000L * 10,
+                status = MessageDeliveryStatus.SENT
+            )
+        )
+    )
+
+    override val ownerEntrantMessages: StateFlow<List<OwnerEntrantMessage>> = _ownerEntrantMessages.asStateFlow()
+
+    private val _adminAuditLogs = MutableStateFlow<List<AdminAuditAccessLog>>(emptyList())
+    override val adminAuditLogs: StateFlow<List<AdminAuditAccessLog>> = _adminAuditLogs.asStateFlow()
+
+    override fun logAdminAuditAccess(
+        adminId: String,
+        adminName: String,
+        reservationId: String,
+        ownerId: String,
+        entrantId: String
+    ) {
+        val entry = AdminAuditAccessLog(
+            id = "audit-${UUID.randomUUID().toString().take(8)}",
+            adminId = adminId,
+            adminName = adminName.ifBlank { "Admin" },
+            targetReservationId = reservationId,
+            targetOwnerId = ownerId,
+            targetEntrantId = entrantId,
+            timestampMillis = System.currentTimeMillis()
+        )
+        _adminAuditLogs.update { it + entry }
+    }
 
 
     /** Switches the user's role in the mock profile state. */
