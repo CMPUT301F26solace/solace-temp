@@ -1,3 +1,11 @@
+/**
+ * CreateCampsiteScreen.kt
+ * 
+ * Purpose: Composable screen allowing campsite owners to register new campsites with location, pricing, amenities, and policy details.
+ * 
+ * Issues / Outstanding Issues:
+ * - Geo-coordinates default to park region if custom pin drop is omitted.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background

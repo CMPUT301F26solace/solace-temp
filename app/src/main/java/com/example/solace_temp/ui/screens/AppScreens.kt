@@ -1,3 +1,11 @@
+/**
+ * AppScreens.kt
+ * 
+ * Purpose: Defines sealed class representations for screen routes and navigation arguments used across the app.
+ * 
+ * Issues / Outstanding Issues:
+ * - None currently known.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background

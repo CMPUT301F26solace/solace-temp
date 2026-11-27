@@ -1,3 +1,12 @@
+/**
+ * OwnerWaitlistScreen.kt
+ * 
+ * Purpose: Composable screen providing campsite owners with a live view of waitlisted entrants,
+ * including join timestamps and selection status for a specific lottery.
+ * 
+ * Issues / Outstanding Issues:
+ * - Older waitlist entries created prior to timestamp tracking display a fallback label.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.layout.*

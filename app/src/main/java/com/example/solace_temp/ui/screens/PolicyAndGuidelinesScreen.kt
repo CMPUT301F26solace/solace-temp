@@ -1,3 +1,11 @@
+/**
+ * PolicyAndGuidelinesScreen.kt
+ * 
+ * Purpose: Composable screen displaying app terms, fair lottery rules, cancellation policies, and user guidelines.
+ * 
+ * Issues / Outstanding Issues:
+ * - Content is static markdown-styled text for easy review.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background

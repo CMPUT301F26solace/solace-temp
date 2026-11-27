@@ -98,7 +98,7 @@ fun SolaceCampsiteApp() {
     val repository = remember { FirestoreAppRepository(context) }
     val profile by repository.currentProfile.collectAsState()
     val navController = rememberNavController()
-    val navItems = getBottomNavItemsForRole(profile.role)
+    val navItems = getBottomNavItemsForRole(profile.role, profile.isAdmin)
     val scope = rememberCoroutineScope()
 
     val lotteries by repository.lotteries.collectAsState()
@@ -148,10 +148,14 @@ fun SolaceCampsiteApp() {
         }
     }
 
-    // Automatically jump to the first tab of the new role when switching roles
-    LaunchedEffect(profile.role) {
-        navController.navigate(navItems.first().route) {
-            popUpTo(0)
+    // Automatically jump to the first tab of the new role when switching roles, and guard against unauthorized Admin role when !isAdmin
+    LaunchedEffect(profile.role, profile.isAdmin) {
+        if (!profile.isAdmin && profile.role == UserRole.ADMIN) {
+            repository.switchRole(UserRole.ENTRANT)
+        } else {
+            navController.navigate(navItems.first().route) {
+                popUpTo(0)
+            }
         }
     }
 

@@ -8,6 +8,8 @@
  */
 package com.example.solace_temp.models
 
+import com.google.firebase.firestore.PropertyName
+
 /**
  * Defines the roles a user can assume within the application.
  */
@@ -33,6 +35,11 @@ data class Geolocation(
     val locationName: String = "Banff National Park, AB"
 )
 
+/** Enum defining the administrative status of a user account. */
+enum class AccountStatus {
+    ACTIVE, INACTIVE, SUSPENDED
+}
+
 /**
  * Represents a user profile in the system.
  * 
@@ -44,13 +51,9 @@ data class Geolocation(
  * @property receiveNotifications Indicates whether the user opted in to receive app notifications.
  * @property role The current active [UserRole] of this user.
  * @property isAdmin Indicates if the user has admin privileges.
+ * @property accountStatus The administrative status of the user account ([AccountStatus.ACTIVE], [AccountStatus.INACTIVE], or [AccountStatus.SUSPENDED]).
+ * @property registrationDateMillis The timestamp in milliseconds when the profile was registered.
  */
-
-/** Enum defining the administrative status of a user account. */
-enum class AccountStatus {
-    ACTIVE, INACTIVE, SUSPENDED
-}
-
 data class Profile(
     val deviceId: String = "",
     val name: String = "",
@@ -59,10 +62,16 @@ data class Profile(
     val profileImageUrl: String? = null,
     val receiveNotifications: Boolean = true,
     val role: UserRole = UserRole.ENTRANT,
+    @get:PropertyName("isAdmin") @field:PropertyName("isAdmin")
     val isAdmin: Boolean = true, // True by default in dev so TAs/team can test Admin role easily
     val accountStatus: AccountStatus = AccountStatus.ACTIVE,
     val registrationDateMillis: Long = System.currentTimeMillis()
 )
+
+/** Enum defining the administrative status of a campsite. */
+enum class CampsiteStatus {
+    ACTIVE, DRAFT, FLAGGED
+}
 
 /**
  * Represents a campsite registered in the system.
@@ -77,6 +86,8 @@ data class Profile(
  * @property rating The average user rating of the campsite.
  * @property imageUrl Optional URL for a cover image of the campsite.
  * @property amenities A list of amenities available at the campsite.
+ * @property status The administrative status of the campsite ([CampsiteStatus.ACTIVE], [CampsiteStatus.DRAFT], or [CampsiteStatus.FLAGGED]).
+ * @property dateCreatedMillis Timestamp in milliseconds when the campsite was created.
  * @property tags A list of categorical tags describing the campsite.
  * @property rulesAndPolicy The rules and refund policies for the campsite.
  * @property qrCodePayload The deep link payload encoded in the campsite's QR code.
@@ -84,12 +95,6 @@ data class Profile(
  * @property bookingStartDateMillis The earliest permissible check-in date in milliseconds.
  * @property bookingEndDateMillis The latest permissible check-out date in milliseconds.
  */
-
-/** Enum defining the administrative status of a campsite. */
-enum class CampsiteStatus {
-    ACTIVE, DRAFT, FLAGGED
-}
-
 data class Campsite(
     val id: String = "",
     val ownerId: String = "",
@@ -122,11 +127,14 @@ data class Campsite(
  * @property registrationEndMillis The end timestamp for waitlist registration in milliseconds.
  * @property registrationStart The start date for waitlist registration.
  * @property registrationEnd The end date for waitlist registration.
+ * @property bookingStartMillis Start timestamp for allowed bookings in milliseconds.
+ * @property bookingEndMillis End timestamp for allowed bookings in milliseconds.
  * @property bookingStart The start date for allowed bookings.
  * @property bookingEnd The end date for allowed bookings.
  * @property maxWinners The maximum number of entrants that can be drawn.
  * @property waitlistCapacity Optional limit on how many entrants can join the waitlist.
  * @property waitingListEntrantIds List of entrant IDs currently on the waitlist.
+ * @property waitlistJoinedAtMillis Map of entrant device ID to timestamp in milliseconds when they joined.
  * @property invitedWinnerIds List of entrant IDs who have won the draw.
  * @property isDrawn Indicates whether the lottery draw has already taken place.
  */
@@ -226,6 +234,19 @@ enum class MessageDeliveryStatus {
 
 /**
  * Represents a direct message sent between a campsite owner and an entrant with a reservation.
+ * 
+ * @property id Unique identifier for the message.
+ * @property ownerId Device ID of the campsite owner.
+ * @property ownerName Display name of the campsite owner.
+ * @property entrantId Device ID of the entrant.
+ * @property entrantName Display name of the entrant.
+ * @property campsiteId Identifier of the relevant campsite.
+ * @property campsiteName Name of the relevant campsite.
+ * @property reservationId Identifier of the associated reservation.
+ * @property reservationStatus Status of the associated reservation.
+ * @property messageText The text content of the message.
+ * @property timestampMillis Epoch timestamp in milliseconds when the message was sent.
+ * @property status Delivery status ([MessageDeliveryStatus.SENT], [MessageDeliveryStatus.DELIVERED], or [MessageDeliveryStatus.READ]).
  */
 data class OwnerEntrantMessage(
     val id: String = "",
@@ -244,6 +265,15 @@ data class OwnerEntrantMessage(
 
 /**
  * Represents an audit record of an administrator accessing communication logs.
+ * 
+ * @property id Unique identifier for the audit record.
+ * @property adminId Device ID of the administrator.
+ * @property adminName Display name of the administrator.
+ * @property targetReservationId Identifier of the reservation whose chat was audited.
+ * @property targetOwnerId Device ID of the target campsite owner.
+ * @property targetEntrantId Device ID of the target entrant.
+ * @property timestampMillis Epoch timestamp in milliseconds when access occurred.
+ * @property actionDescription Human-readable description of the audit action.
  */
 data class AdminAuditAccessLog(
     val id: String = "",

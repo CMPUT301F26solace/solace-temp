@@ -182,8 +182,11 @@ class FirestoreAppRepository(context: Context) : AppRepository {
                 return@addSnapshotListener
             }
             if (snapshot != null && snapshot.exists()) {
-                snapshot.toObject(Profile::class.java)?.let {
-                    _currentProfile.value = it
+                val profile = snapshot.toObject(Profile::class.java)
+                if (profile != null) {
+                    val rawAdmin = snapshot.getBoolean("admin") ?: snapshot.getBoolean("isAdmin")
+                    val updated = if (rawAdmin != null) profile.copy(isAdmin = rawAdmin) else profile
+                    _currentProfile.value = updated
                 }
             } else {
                 // First time this device opens the app -> create profile document in Firestore
@@ -196,7 +199,12 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     private fun listenToAllProfiles() {
         db.collection("profiles").addSnapshotListener { snapshot, error ->
             if (error != null || snapshot == null) return@addSnapshotListener
-            _profiles.value = snapshot.toObjects(Profile::class.java)
+            val list = snapshot.documents.mapNotNull { doc ->
+                val p = doc.toObject(Profile::class.java) ?: return@mapNotNull null
+                val rawAdmin = doc.getBoolean("admin") ?: doc.getBoolean("isAdmin")
+                if (rawAdmin != null) p.copy(isAdmin = rawAdmin) else p
+            }
+            _profiles.value = list
         }
     }
 
@@ -246,6 +254,9 @@ class FirestoreAppRepository(context: Context) : AppRepository {
 
     /** Switches the local and remote profile role. */
     override fun switchRole(newRole: UserRole) {
+        if (newRole == UserRole.ADMIN && !_currentProfile.value.isAdmin) {
+            return
+        }
         val updated = _currentProfile.value.copy(role = newRole)
         _currentProfile.value = updated
         db.collection("profiles").document(deviceId).set(updated)
@@ -727,7 +738,15 @@ class FirestoreAppRepository(context: Context) : AppRepository {
             for (doc in query.documents) {
                 val lot = doc.toObject(Lottery::class.java) ?: continue
                 val updatedWinners = lot.invitedWinnerIds.filterNot { it == deviceId }
-                db.collection("lotteries").document(doc.id).update("invitedWinnerIds", updatedWinners)
+                val updatedWaitlist = lot.waitingListEntrantIds.filterNot { it == deviceId }
+                val updatedJoinedAt = lot.waitlistJoinedAtMillis - deviceId
+                db.collection("lotteries").document(doc.id).update(
+                    mapOf(
+                        "invitedWinnerIds" to updatedWinners,
+                        "waitingListEntrantIds" to updatedWaitlist,
+                        "waitlistJoinedAtMillis" to updatedJoinedAt
+                    )
+                )
             }
         } catch (e: Exception) {
             Log.e("FirestoreRepo", "Error declining invitation", e)

@@ -1,3 +1,12 @@
+/**
+ * OwnerBookingUtils.kt
+ * 
+ * Purpose: Utility functions and calendar status calculations for owner reservations, calendar date formatting,
+ * ISO date parsing, and campsite status determination.
+ * 
+ * Issues / Outstanding Issues:
+ * - Calendar day status checks assume UTC midnight boundaries for ISO date string matching.
+ */
 package com.example.solace_temp.ui.screens
 
 import com.example.solace_temp.models.Campsite

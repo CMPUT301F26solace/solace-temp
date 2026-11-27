@@ -64,7 +64,7 @@ fun AdminMessageLogsScreen(
     var selectedThreadMessage by remember { mutableStateOf<OwnerEntrantMessage?>(null) }
 
     // Access Restriction: Only authenticated users with verified administrator permissions
-    val isAuthorizedAdmin = profile.isAdmin || profile.role == UserRole.ADMIN
+    val isAuthorizedAdmin = profile.isAdmin && profile.role == UserRole.ADMIN
 
     Scaffold(
         topBar = {

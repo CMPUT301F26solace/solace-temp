@@ -588,6 +588,9 @@ object MockAppRepository : AppRepository {
 
     /** Switches the user's role in the mock profile state. */
     override fun switchRole(newRole: UserRole) {
+        if (newRole == UserRole.ADMIN && !_currentProfile.value.isAdmin) {
+            return
+        }
         _currentProfile.update { it.copy(role = newRole) }
     }
 
@@ -881,7 +884,11 @@ object MockAppRepository : AppRepository {
         _lotteries.update { list ->
             list.map { lot ->
                 if (campsiteId in lot.campsiteIds) {
-                    lot.copy(invitedWinnerIds = lot.invitedWinnerIds.filterNot { it == currentDeviceId })
+                    lot.copy(
+                        invitedWinnerIds = lot.invitedWinnerIds.filterNot { it == currentDeviceId },
+                        waitingListEntrantIds = lot.waitingListEntrantIds.filterNot { it == currentDeviceId },
+                        waitlistJoinedAtMillis = lot.waitlistJoinedAtMillis - currentDeviceId
+                    )
                 } else lot
             }
         }

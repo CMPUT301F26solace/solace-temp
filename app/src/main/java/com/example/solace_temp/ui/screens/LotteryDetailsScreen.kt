@@ -1,3 +1,11 @@
+/**
+ * LotteryDetailsScreen.kt
+ * 
+ * Purpose: Composable screen displaying comprehensive details of a lottery, owner controls, manual draw/redraw triggers, and testing fast-forwarding.
+ * 
+ * Issues / Outstanding Issues:
+ * - Manual redraw is enabled only when unfulfilled winner slots remain after initial draw.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background
@@ -35,6 +43,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import com.example.solace_temp.models.UserRole
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -291,7 +300,7 @@ fun LotteryDetailsScreen(
 
                         var showEditLotteryDialog by remember { mutableStateOf(false) }
 
-                        val isOwnerOrAdmin = lottery.ownerId == profile.deviceId || profile.isAdmin
+                        val isOwnerOrAdmin = lottery.ownerId == profile.deviceId || (profile.isAdmin && profile.role == UserRole.ADMIN)
                         val isPastDeadline = (lottery.registrationEndMillis ?: Long.MAX_VALUE) <= countdownNow
 
                         if (isOwnerOrAdmin && isPastDeadline && !lottery.isDrawn) {
@@ -327,7 +336,7 @@ fun LotteryDetailsScreen(
                             }
                         }
 
-                        if (lottery.ownerId == profile.deviceId || profile.isAdmin) {
+                        if (lottery.ownerId == profile.deviceId || (profile.isAdmin && profile.role == UserRole.ADMIN)) {
                             Spacer(Modifier.height(8.dp))
                             Button(
                                 onClick = { showEditLotteryDialog = true },

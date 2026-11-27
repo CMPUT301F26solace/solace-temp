@@ -1,3 +1,11 @@
+/**
+ * AdminCampsitesScreen.kt
+ * 
+ * Purpose: Provides an administrative management view for inspecting, filtering, and moderating registered campsites across the system (US 03.01.01).
+ * 
+ * Issues / Outstanding Issues:
+ * - Campsite deletion requires explicit confirmation override if active reservations or open lotteries exist.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.clickable
