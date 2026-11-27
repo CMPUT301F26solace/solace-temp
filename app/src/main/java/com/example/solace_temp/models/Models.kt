@@ -253,3 +253,55 @@ data class AdminAuditAccessLog(
     val timestampMillis: Long = System.currentTimeMillis(),
     val actionDescription: String = "Reviewed conversation thread history"
 )
+
+/**
+ * Summarizes dependent records associated with a campsite prior to administrative removal (US 03.01.01).
+ * Used by the UI to warn administrators about active reservations, open lotteries, and assets
+ * that will be cancelled or cleaned up upon deletion.
+ *
+ * @property activeReservationIds IDs of currently active reservations booked at this campsite.
+ * @property openLotteryIds IDs of lotteries linked to this campsite whose registration window is currently open.
+ * @property affectedLotteryIds IDs of all lotteries referencing this campsite (including closed/unfulfilled waitlists).
+ * @property totalWaitlistedEntrants Total number of unfulfilled waitlist entries across affected lotteries.
+ * @property hasMediaAsset True if the campsite currently references a cover image URL.
+ * @property hasQrCode True if the campsite currently has an active promotional QR code payload.
+ */
+data class CampsiteRemovalDependencies(
+    val activeReservationIds: List<String> = emptyList(),
+    val openLotteryIds: List<String> = emptyList(),
+    val affectedLotteryIds: List<String> = emptyList(),
+    val totalWaitlistedEntrants: Int = 0,
+    val hasMediaAsset: Boolean = false,
+    val hasQrCode: Boolean = false
+) {
+    /** True when active reservations or open-window lotteries require an explicit admin override. */
+    val requiresOverrideWarning: Boolean
+        get() = activeReservationIds.isNotEmpty() || openLotteryIds.isNotEmpty()
+}
+
+/**
+ * Audit log entry recording an administrative campsite deletion event (US 03.01.01).
+ *
+ * @property id Unique identifier for this audit log record.
+ * @property adminId Device/account ID of the administrator who executed the removal.
+ * @property adminName Display name of the administrator at the time of deletion.
+ * @property campsiteId Unique ID of the removed campsite.
+ * @property campsiteName Name of the removed campsite for human-readable audit trails.
+ * @property ownerId Device/account ID of the campsite's owner.
+ * @property timestampMillis Epoch timestamp in milliseconds when the deletion occurred.
+ * @property overrideUsed True if the admin explicitly overrode active reservations or open lotteries.
+ * @property cancelledReservationIds IDs of any active reservations cancelled during the override.
+ * @property cleanedLotteryIds IDs of lotteries updated or deleted to clean up unfulfilled waitlists.
+ */
+data class AdminCampsiteDeletionLog(
+    val id: String = "",
+    val adminId: String = "",
+    val adminName: String = "",
+    val campsiteId: String = "",
+    val campsiteName: String = "",
+    val ownerId: String = "",
+    val timestampMillis: Long = System.currentTimeMillis(),
+    val overrideUsed: Boolean = false,
+    val cancelledReservationIds: List<String> = emptyList(),
+    val cleanedLotteryIds: List<String> = emptyList()
+)

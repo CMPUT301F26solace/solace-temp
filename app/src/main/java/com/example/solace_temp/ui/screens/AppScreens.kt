@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -75,6 +76,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // =========================================================================
 // Someone should split this file into separate files so everyone can work on their part without creating merge conflicts
@@ -221,7 +223,7 @@ fun getLotteryStatus(lottery: Lottery?, campsite: Campsite? = null): String {
 /**
  * Composable displaying the details of a specific campsite.
  * Used by both Entrants (to join waitlists) and Owners (to view/share QR codes).
- * 
+ *
  * @param campsiteId The ID of the campsite to display.
  * @param repository The data repository for fetching campsite data.
  * @param onBack Callback invoked when the user navigates back.
@@ -240,7 +242,55 @@ fun CampsiteDetailsScreen(
     val profiles by repository.profiles.collectAsState()
     val context = LocalContext.current
 
+    // State for administrative removal workflow and visual confirmation (US 03.01.01)
+    var showAdminRemoveDialog by remember { mutableStateOf(false) }
+    var removalDependencies by remember { mutableStateOf<CampsiteRemovalDependencies?>(null) }
+    var isRemovingCampsite by remember { mutableStateOf(false) }
+    var removedCampsiteName by remember { mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
     val campsite = campsites.find { it.id == campsiteId }
+
+    // Display explicit visual confirmation if this admin just removed the campsite
+    if (campsite == null && removedCampsiteName != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Campsite Removed",
+                    tint = Color(0xFF2E7D32),
+                    modifier = Modifier.size(56.dp)
+                )
+                Text(
+                    text = "Campsite \"$removedCampsiteName\" was successfully removed.",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Associated listings, QR codes, and waitlists have been cleaned up and logged.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                Button(onClick = onBack) {
+                    Text("Return to Registry")
+                }
+            }
+        }
+        return
+    }
+
     if (campsite == null) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -273,7 +323,8 @@ fun CampsiteDetailsScreen(
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -347,7 +398,7 @@ fun CampsiteDetailsScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text("Max ${campsite.maxOccupancy} guests · ★ ${campsite.rating}", style = MaterialTheme.typography.bodyMedium)
-                        
+
                         // Tags
                         if (campsite.tags.isNotEmpty()) {
                             Spacer(Modifier.height(12.dp))
@@ -470,7 +521,7 @@ fun CampsiteDetailsScreen(
             if (profile.role == UserRole.ENTRANT) {
                 var showBookingDialog by remember { mutableStateOf(false) }
                 var entrantFeedback by remember { mutableStateOf("") }
-                
+
                 Spacer(Modifier.height(12.dp))
                 Button(
                     onClick = { showBookingDialog = true },
@@ -479,11 +530,11 @@ fun CampsiteDetailsScreen(
                 ) {
                     Text("Select Dates & Book")
                 }
-                
+
                 if (entrantFeedback.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = entrantFeedback, 
+                        text = entrantFeedback,
                         color = if (entrantFeedback.startsWith("Error")) MaterialTheme.colorScheme.error else Color(0xFF4CAF50),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
@@ -500,7 +551,7 @@ fun CampsiteDetailsScreen(
                                 val selEnd = dateState.selectedEndDateMillis
                                 val campStart = campsite.bookingStartDateMillis ?: 0L
                                 val campEnd = campsite.bookingEndDateMillis ?: Long.MAX_VALUE
-                                
+
                                 if (selStart == null || selEnd == null) {
                                     entrantFeedback = "Error: Please select both a check-in and check-out date."
                                 } else if (selStart < campStart || selEnd > campEnd) {
@@ -520,7 +571,7 @@ fun CampsiteDetailsScreen(
                         DateRangePicker(state = dateState, modifier = Modifier.weight(1f))
                     }
                 }
-                
+
                 // One shared join/leave UI for all lotteries on this campsite.
                 // Uses asynchronous completion and per-lottery status messages.
                 LotteryWaitingListSection(
@@ -531,7 +582,7 @@ fun CampsiteDetailsScreen(
 
             // CAMPSITE OWNER QR CODE & MANAGEMENT SECTION
             val isAuthorizedOwner = profile.deviceId == campsite.ownerId || profile.isAdmin
-            
+
             if ((profile.role == UserRole.CAMPSITE_OWNER || profile.role == UserRole.ADMIN) && isAuthorizedOwner) {
                 Card(
                     shape = RoundedCornerShape(24.dp),
@@ -552,7 +603,7 @@ fun CampsiteDetailsScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Spacer(Modifier.height(16.dp))
-                        
+
                         // Management Quick Actions
                         var showEditCampsiteDialog by remember { mutableStateOf(false) }
                         var showCreateLotteryDialog by remember { mutableStateOf(false) }
@@ -659,10 +710,95 @@ fun CampsiteDetailsScreen(
                     }
                 }
             }
+
+            // ADMINISTRATOR MODERATION SECTION (US 03.01.01)
+            // Strictly accessible only to users with verified administrator privileges
+            if (profile.isAdmin && profile.role == UserRole.ADMIN) {
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(20.dp)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Administrator Moderation",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "Removing this campsite will immediately unlist it across the platform, clean up associated assets/waitlists, and log the action.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(
+                            onClick = {
+                                // Snapshot active dependencies right before opening confirmation dialog
+                                removalDependencies = repository.getCampsiteRemovalDependencies(campsite.id)
+                                showAdminRemoveDialog = true
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Remove Campsite",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Remove Registered Campsite")
+                        }
+                    }
+                }
+            }
         }
     }
-}
 
+    // Show dependency-aware removal confirmation dialog when triggered
+    val deps = removalDependencies
+    if (showAdminRemoveDialog && deps != null) {
+        AdminRemoveCampsiteDialog(
+            campsite = campsite,
+            dependencies = deps,
+            isRemoving = isRemovingCampsite,
+            onDismiss = {
+                showAdminRemoveDialog = false
+                removalDependencies = null
+            },
+            onConfirmRemoval = { forceOverride ->
+                isRemovingCampsite = true
+                val targetName = campsite.name
+                repository.removeCampsiteAsAdmin(
+                    campsiteId = campsite.id,
+                    forceOverride = forceOverride
+                ) { result ->
+                    isRemovingCampsite = false
+                    showAdminRemoveDialog = false
+                    removalDependencies = null
+                    result.onSuccess {
+                        // Triggers the visual confirmation view once the campsite leaves state
+                        removedCampsiteName = targetName
+                    }.onFailure { error ->
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = error.message ?: "Failed to remove campsite."
+                            )
+                        }
+                    }
+                }
+            }
+        )
+    }
+}
 // =========================================================================
 // CAMPSITE LIST SCREEN (Used by Entrant Search & Owner My Campsites)
 // =========================================================================
@@ -1360,7 +1496,7 @@ fun ProfileAndRoleScreen(
     ) {
         Text("Your Profile", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
-        // Acceptance Criteria: Admin can navigate between views within the same profile[cite: 15]
+        // Acceptance Criteria: Admin can navigate between views within the same profile
         if (profile.isAdmin) {
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -2984,18 +3120,17 @@ fun TeammatePlaceholderScreen(title: String, userStoriesCovered: String) {
     }
 }
 
+
 /**
- * Displays the administrator registry view for browsing all platform campsites.
+ * Displays the administrator registry view for browsing and moderating all platform campsites
+ * (US 03.04.01, US 03.01.01).
  *
- * This screen enforces role-based access control, ensuring only verified administrators
- * can access the directory. It provides robust data management capabilities including
- * text-based search (by name, location, or owner ID), multi-criteria filtering
- * (by status, active lottery association, and creation date range via a dialog picker),
- * and chronological sorting. The UI utilizes virtual scrolling to efficiently handle
- * large datasets and provides explicit visual feedback for empty or unmatched search states.
+ * Enforces verified administrator privileges, supports multi-criteria search/filtering/sorting,
+ * and provides a safe campsite removal workflow with dependency inspection, explicit override
+ * confirmation for active reservations or open lotteries, and Snackbar completion feedback.
  *
- * @param repository The data repository providing state flows for campsites, lotteries, and the current user profile.
- * @param onSelectCampsite Callback triggered with the target campsite's ID when an admin taps a card for moderation or review.
+ * @param repository The data repository exposing campsite, lottery, and profile state flows.
+ * @param onSelectCampsite Callback triggered with a campsite ID when an admin taps a card to inspect it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -3007,24 +3142,38 @@ fun AdminCampsitesScreen(
     val profile by repository.currentProfile.collectAsState()
     val lotteries by repository.lotteries.collectAsState()
 
+    // Search, filter, and sort UI state
     var searchQuery by remember { mutableStateOf("") }
     var selectedStatusFilter by remember { mutableStateOf<CampsiteStatus?>(null) }
     var requireActiveLottery by remember { mutableStateOf(false) }
     var sortDescending by remember { mutableStateOf(true) }
 
-    // NEW: State for Date Created Filter
+    // Date range filter dialog state
     var showDateFilterDialog by remember { mutableStateOf(false) }
     var dateFilterStart by remember { mutableStateOf<Long?>(null) }
     var dateFilterEnd by remember { mutableStateOf<Long?>(null) }
 
-    if (profile.role != UserRole.ADMIN) {
+    // Administrative removal dialog and feedback state (US 03.01.01)
+    var campsitePendingRemoval by remember { mutableStateOf<Campsite?>(null) }
+    var pendingDependencies by remember { mutableStateOf<CampsiteRemovalDependencies?>(null) }
+    var isRemoving by remember { mutableStateOf(false) }
+
+    // Snackbar state for visual confirmation or error feedback after removal
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Role-based access guard: requires both verified admin privilege flag and active ADMIN role
+    if (!profile.isAdmin || profile.role != UserRole.ADMIN) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Access Denied: Administrator credentials required.", color = MaterialTheme.colorScheme.error)
+            Text(
+                text = "Access Denied: Administrator credentials required.",
+                color = MaterialTheme.colorScheme.error
+            )
         }
         return
     }
 
-    // UPDATED: Filter logic now checks the dateCreatedMillis
+    // Apply search, status, lottery association, creation date range, and chronological sorting
     val filteredAndSorted = campsites.filter { site ->
         val matchesSearch = site.name.contains(searchQuery, ignoreCase = true) ||
                 site.location.locationName.contains(searchQuery, ignoreCase = true) ||
@@ -3032,7 +3181,6 @@ fun AdminCampsitesScreen(
         val matchesStatus = selectedStatusFilter == null || site.status == selectedStatusFilter
         val matchesLottery = !requireActiveLottery || lotteries.any { it.campsiteIds.contains(site.id) }
 
-        // Check if the campsite's creation date falls within the selected filter range
         val matchesDate = if (dateFilterStart != null && dateFilterEnd != null) {
             site.dateCreatedMillis in dateFilterStart!!..dateFilterEnd!!
         } else true
@@ -3043,112 +3191,208 @@ fun AdminCampsitesScreen(
         else list.sortedBy { it.dateCreatedMillis }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().background(Color(0xFFEDE8F8)).padding(16.dp)
-    ) {
-        Text("Admin: Campsite Registry", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            label = { Text("Search by name, location, or owner ID...") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    // Scaffold provides a dedicated SnackbarHost for post-deletion confirmation feedback
+    Scaffold(
+        containerColor = Color(0xFFEDE8F8),
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
         ) {
+            Text(
+                text = "Admin: Campsite Registry",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("Search by name, location, or owner ID...") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            // Horizontal filter chips and chronological sort toggle
             Row(
-                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                FilterChip(
-                    selected = selectedStatusFilter == null && !requireActiveLottery && dateFilterStart == null,
-                    onClick = {
-                        selectedStatusFilter = null
-                        requireActiveLottery = false
-                        dateFilterStart = null
-                        dateFilterEnd = null
-                    },
-                    label = { Text("All") }
-                )
-
-                // NEW: Date Created Filter Chip
-                FilterChip(
-                    selected = dateFilterStart != null,
-                    onClick = { showDateFilterDialog = true },
-                    label = { Text(if (dateFilterStart != null) "Date Filtered" else "Filter Date") }
-                )
-
-                FilterChip(
-                    selected = requireActiveLottery,
-                    onClick = { requireActiveLottery = !requireActiveLottery },
-                    label = { Text("Has Lottery") }
-                )
-                CampsiteStatus.entries.forEach { status ->
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     FilterChip(
-                        selected = selectedStatusFilter == status,
-                        onClick = { selectedStatusFilter = status },
-                        label = { Text(status.name) }
+                        selected = selectedStatusFilter == null && !requireActiveLottery && dateFilterStart == null,
+                        onClick = {
+                            selectedStatusFilter = null
+                            requireActiveLottery = false
+                            dateFilterStart = null
+                            dateFilterEnd = null
+                        },
+                        label = { Text("All") }
+                    )
+
+                    FilterChip(
+                        selected = dateFilterStart != null,
+                        onClick = { showDateFilterDialog = true },
+                        label = { Text(if (dateFilterStart != null) "Date Filtered" else "Filter Date") }
+                    )
+
+                    FilterChip(
+                        selected = requireActiveLottery,
+                        onClick = { requireActiveLottery = !requireActiveLottery },
+                        label = { Text("Has Lottery") }
+                    )
+
+                    CampsiteStatus.entries.forEach { status ->
+                        FilterChip(
+                            selected = selectedStatusFilter == status,
+                            onClick = { selectedStatusFilter = status },
+                            label = { Text(status.name) }
+                        )
+                    }
+                }
+
+                IconButton(onClick = { sortDescending = !sortDescending }) {
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = "Sort by Date",
+                        tint = if (sortDescending) MaterialTheme.colorScheme.primary else Color.Gray
                     )
                 }
             }
 
-            IconButton(onClick = { sortDescending = !sortDescending }) {
-                Icon(
-                    imageVector = Icons.Default.DateRange,
-                    contentDescription = "Sort by Date",
-                    tint = if (sortDescending) MaterialTheme.colorScheme.primary else Color.Gray
+            Spacer(Modifier.height(12.dp))
+
+            // Empty state feedback for empty registry vs. unmatched filters
+            if (filteredAndSorted.isEmpty()) {
+                Text(
+                    text = if (searchQuery.isBlank() && selectedStatusFilter == null && !requireActiveLottery && dateFilterStart == null)
+                        "No campsites registered in the platform."
+                    else
+                        "No campsites match search/filter criteria.",
+                    modifier = Modifier.padding(16.dp)
                 )
             }
-        }
 
-        Spacer(Modifier.height(12.dp))
+            // Virtualized list of registered campsites
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(filteredAndSorted, key = { it.id }) { site ->
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectCampsite(site.id) }
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(site.name, fontWeight = FontWeight.Bold)
 
-        if (filteredAndSorted.isEmpty()) {
-            Text(
-                text = if (searchQuery.isBlank() && selectedStatusFilter == null && !requireActiveLottery && dateFilterStart == null)
-                    "No campsites registered in the platform."
-                else
-                    "No campsites match search/filter criteria.",
-                modifier = Modifier.padding(16.dp)
-            )
-        }
-
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(filteredAndSorted) { site ->
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth().clickable { onSelectCampsite(site.id) }
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(site.name, fontWeight = FontWeight.Bold)
-
-                            val statusColor = when(site.status) {
-                                CampsiteStatus.ACTIVE -> Color(0xFF2E7D32)
-                                CampsiteStatus.DRAFT -> Color(0xFF757575)
-                                CampsiteStatus.FLAGGED -> Color(0xFFD32F2F)
+                                val statusColor = when (site.status) {
+                                    CampsiteStatus.ACTIVE -> Color(0xFF2E7D32)
+                                    CampsiteStatus.DRAFT -> Color(0xFF757575)
+                                    CampsiteStatus.FLAGGED -> Color(0xFFD32F2F)
+                                }
+                                Text(site.status.name, color = statusColor, fontWeight = FontWeight.Bold)
                             }
-                            Text(site.status.name, color = statusColor, fontWeight = FontWeight.Bold)
+
+                            Text("Owner ID: ${site.ownerId}")
+                            Text("📍 ${site.location.locationName} · Capacity: ${site.maxOccupancy}")
+                            Spacer(Modifier.height(8.dp))
+
+                            // Action row: navigation hint on left, verified-admin removal trigger on right
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Tap to manage/moderate →",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+
+                                TextButton(
+                                    onClick = {
+                                        // Inspect active reservations, open lotteries, media, and QR codes before prompting
+                                        pendingDependencies = repository.getCampsiteRemovalDependencies(site.id)
+                                        campsitePendingRemoval = site
+                                    },
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Remove ${site.name}",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Remove")
+                                }
+                            }
                         }
-                        Text("Owner ID: ${site.ownerId}")
-                        Text("📍 ${site.location.locationName} · Capacity: ${site.maxOccupancy}")
-                        Spacer(Modifier.height(4.dp))
-                        Text("Tap to manage/moderate →", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
         }
     }
 
-    // NEW: Dialog popup for selecting the date range
+    // Confirmation and dependency override dialog for administrative campsite removal (US 03.01.01)
+    val targetSite = campsitePendingRemoval
+    val deps = pendingDependencies
+    if (targetSite != null && deps != null) {
+        AdminRemoveCampsiteDialog(
+            campsite = targetSite,
+            dependencies = deps,
+            isRemoving = isRemoving,
+            onDismiss = {
+                campsitePendingRemoval = null
+                pendingDependencies = null
+            },
+            onConfirmRemoval = { forceOverride ->
+                isRemoving = true
+                val removedName = targetSite.name
+                repository.removeCampsiteAsAdmin(
+                    campsiteId = targetSite.id,
+                    forceOverride = forceOverride
+                ) { result ->
+                    isRemoving = false
+                    campsitePendingRemoval = null
+                    pendingDependencies = null
+
+                    // Show visual confirmation or error feedback via Snackbar
+                    coroutineScope.launch {
+                        result.onSuccess {
+                            snackbarHostState.showSnackbar(
+                                message = "Campsite \"$removedName\" was successfully removed."
+                            )
+                        }.onFailure { error ->
+                            snackbarHostState.showSnackbar(
+                                message = error.message ?: "Failed to remove campsite."
+                            )
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    // Dialog popup for selecting the creation date range filter
     if (showDateFilterDialog) {
         val dateState = rememberDateRangePickerState(
             initialSelectedStartDateMillis = dateFilterStart,
@@ -3180,6 +3424,160 @@ fun AdminCampsitesScreen(
 }
 
 /**
+ * Confirmation and dependency-override dialog for administrative campsite removal (US 03.01.01).
+ *
+ * Details the standard consequences of deletion (listing removal, QR invalidation, cloud media
+ * cleanup, waitlist cleanup, and audit logging). When active reservations or open-window lotteries
+ * exist, blocks deletion until the administrator explicitly acknowledges the override checkbox.
+ *
+ * @param campsite The [Campsite] targeted for removal.
+ * @param dependencies Pre-fetched [CampsiteRemovalDependencies] snapshot for this campsite.
+ * @param isRemoving True while the asynchronous repository removal request is in flight.
+ * @param onDismiss Callback invoked when the administrator cancels or dismisses the dialog.
+ * @param onConfirmRemoval Callback invoked when removal is confirmed, passing whether override was checked.
+ */
+@Composable
+fun AdminRemoveCampsiteDialog(
+    campsite: Campsite,
+    dependencies: CampsiteRemovalDependencies,
+    isRemoving: Boolean,
+    onDismiss: () -> Unit,
+    onConfirmRemoval: (forceOverride: Boolean) -> Unit
+) {
+    // Reset explicit override acknowledgment whenever a different campsite is targeted
+    var overrideConfirmed by remember(campsite.id) { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (!isRemoving) onDismiss()
+        },
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = "Removal Warning",
+                tint = MaterialTheme.colorScheme.error
+            )
+        },
+        title = {
+            Text(
+                text = if (dependencies.requiresOverrideWarning) "Override & Remove Campsite?"
+                else "Remove Campsite?",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "You are about to permanently remove \"${campsite.name}\" from the platform."
+                )
+
+                // Detail consequences before the admin proceeds
+                Text(
+                    text = buildString {
+                        append("This action will:\n")
+                        append("• Immediately remove the listing from public browsing, search results, and owner listings.\n")
+                        if (dependencies.hasQrCode) {
+                            append("• Invalidate its promotional QR code.\n")
+                        }
+                        if (dependencies.hasMediaAsset) {
+                            append("• Clean up associated media assets from cloud storage.\n")
+                        }
+                        if (dependencies.affectedLotteryIds.isNotEmpty()) {
+                            append("• Clean up ${dependencies.affectedLotteryIds.size} linked lottery(s) and ${dependencies.totalWaitlistedEntrants} unfulfilled waitlist entry(s).\n")
+                        }
+                        append("• Record your admin ID, campsite ID, and timestamp in the audit log.")
+                    },
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                // Explicit override warning if active reservations or open registration windows exist
+                if (dependencies.requiresOverrideWarning) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "Active Dependencies Detected",
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            if (dependencies.activeReservationIds.isNotEmpty()) {
+                                Text(
+                                    text = "• ${dependencies.activeReservationIds.size} active reservation(s) will be cancelled.",
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            if (dependencies.openLotteryIds.isNotEmpty()) {
+                                Text(
+                                    text = "• ${dependencies.openLotteryIds.size} lottery(s) with an open registration window will be closed/updated.",
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+
+                    // Gate override confirmation behind an explicit checkbox
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isRemoving) {
+                                overrideConfirmed = !overrideConfirmed
+                            }
+                    ) {
+                        Checkbox(
+                            checked = overrideConfirmed,
+                            onCheckedChange = { overrideConfirmed = it },
+                            enabled = !isRemoving
+                        )
+                        Text(
+                            text = "I understand and confirm overriding active reservations and open lotteries.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirmRemoval(dependencies.requiresOverrideWarning && overrideConfirmed)
+                },
+                enabled = !isRemoving && (!dependencies.requiresOverrideWarning || overrideConfirmed),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text(
+                    text = when {
+                        isRemoving -> "Removing..."
+                        dependencies.requiresOverrideWarning -> "Override & Remove"
+                        else -> "Remove Campsite"
+                    }
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isRemoving
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
  * Displays the administrator directory for browsing all registered profiles.
  * Implements search, role-based filtering, and date sorting with virtual scrolling
  * to handle high data volumes gracefully.
@@ -3202,7 +3600,7 @@ fun AdminProfilesScreen(
     var dateFilterStart by remember { mutableStateOf<Long?>(null) }
     var dateFilterEnd by remember { mutableStateOf<Long?>(null) }
 
-    // Acceptance Criteria: Only users with verified administrator credentials can access[cite: 12]
+    // Acceptance Criteria: Only users with verified administrator credentials can access
     if (currentProfile.role != UserRole.ADMIN) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Access Denied: Administrator credentials required.", color = MaterialTheme.colorScheme.error)
@@ -3315,11 +3713,11 @@ fun AdminProfilesScreen(
             items(filteredAndSorted) { user ->
                 Card(
                     shape = RoundedCornerShape(16.dp),
-                    // Navigation on click[cite: 12]
+                    // Navigation on click
                     modifier = Modifier.fillMaxWidth().clickable { onSelectProfile(user.deviceId) }
                 ) {
                     Column(Modifier.padding(16.dp)) {
-                        // Key identity details[cite: 12]
+                        // Key identity details
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(user.name.ifBlank { "Unknown User" }, fontWeight = FontWeight.Bold)
 
