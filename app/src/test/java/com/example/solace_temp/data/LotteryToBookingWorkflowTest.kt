@@ -80,6 +80,18 @@ class LotteryToBookingWorkflowTest {
             assertTrue(drawn.isDrawn)
             assertEquals(setOf(firstEntrantId, secondEntrantId), drawn.invitedWinnerIds.toSet())
 
+            // Verify winner notifications were generated for each newly invited winner
+            val winnerNotifs = repo.notifications.value.filter {
+                it.isLotteryWin && it.campsiteId == campsite.id
+            }
+            assertEquals(2, winnerNotifs.size)
+            assertEquals(setOf(firstEntrantId, secondEntrantId), winnerNotifs.map { it.recipientId }.toSet())
+
+            // Verify duplicate notifications are avoided if drawLotteryWinners is called again
+            val notifCountBeforeReDraw = repo.notifications.value.size
+            repo.drawLotteryWinners(lottery.id)
+            assertEquals(notifCountBeforeReDraw, repo.notifications.value.size)
+
             // The first winner books two nights; checkout day is not booked.
             repo.updateProfile(originalProfile.copy(deviceId = firstEntrantId, role = UserRole.ENTRANT))
             bookingError = "Callback not called"

@@ -203,6 +203,7 @@ data class Reservation(
  * @property message The detailed notification message body.
  * @property timestamp A formatted timestamp for the notification.
  * @property isLotteryWin Indicates if this notification represents a lottery win.
+ * @property isSeen Indicates if the notification has been viewed by the recipient.
  */
 data class AppNotification(
     val id: String = "",
@@ -212,7 +213,8 @@ data class AppNotification(
     val title: String = "",
     val message: String = "",
     val timestamp: String = "Today · 9:12 AM",
-    val isLotteryWin: Boolean = false
+    val isLotteryWin: Boolean = false,
+    val isSeen: Boolean = false
 )
 
 /**

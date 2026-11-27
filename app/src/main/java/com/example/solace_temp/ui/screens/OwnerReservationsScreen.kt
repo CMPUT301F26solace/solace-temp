@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -25,9 +27,19 @@ fun OwnerReservationsScreen(repository: AppRepository, onBack: () -> Unit) {
     var selected by remember { mutableStateOf<Reservation?>(null) }
 
     Scaffold(topBar = {
-        TopAppBar(title = { Text("Active Reservations") }, navigationIcon = {
-            TextButton(onClick = onBack) { Text("Back") }
-        })
+        TopAppBar(
+            title = { Text("Active Reservations") },
+            navigationIcon = {
+                TextButton(
+                    onClick = onBack,
+                    modifier = Modifier.testTag("owner_reservations_back")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Spacer(Modifier.width(4.dp))
+                    Text("Back")
+                }
+            }
+        )
     }) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)

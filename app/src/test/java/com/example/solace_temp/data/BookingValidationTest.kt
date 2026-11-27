@@ -63,12 +63,40 @@ class BookingValidationTest {
         )
     }
 
-    @Test fun rejectsBookingBeforeBookingWindow() {
-        val future = lottery.copy(bookingStartMillis = date("2027-05-01"))
+    @Test fun winnerCanBookDatesWithinFutureBookingWindow() {
+        val future = lottery.copy(
+            bookingStartMillis = date("2027-05-01"),
+            bookingEndMillis = date("2027-05-31")
+        )
+        assertNull(
+            bookingValidationError(
+                campsite = campsite,
+                lottery = future,
+                entrantId = "winner",
+                checkInMillis = date("2027-05-07"),
+                checkOutMillis = date("2027-05-09"),
+                reservations = emptyList(),
+                nowMillis = date("2027-04-01")
+            )
+        )
+    }
+
+    @Test fun rejectsBookingDatesOutsideAllowedBookingWindow() {
+        val bounded = lottery.copy(
+            bookingStartMillis = date("2027-05-01"),
+            bookingEndMillis = date("2027-05-31")
+        )
         assertEquals(
-            "The lottery booking period has not started yet.",
-            bookingValidationError(campsite, future, "winner", date("2027-05-07"),
-                date("2027-05-09"), emptyList(), nowMillis = date("2027-04-01"))
+            "Selected dates are outside the allowed campsite booking dates.",
+            bookingValidationError(
+                campsite = campsite,
+                lottery = bounded,
+                entrantId = "winner",
+                checkInMillis = date("2027-06-01"),
+                checkOutMillis = date("2027-06-03"),
+                reservations = emptyList(),
+                nowMillis = date("2027-04-01")
+            )
         )
     }
 

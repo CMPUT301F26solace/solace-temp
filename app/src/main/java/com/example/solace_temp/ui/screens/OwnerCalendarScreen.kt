@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -44,9 +46,19 @@ fun OwnerCalendarScreen(repository: AppRepository, onBack: () -> Unit) {
     val booked = campsite?.let { campsiteBookingsByDay(it.id, reservations) }.orEmpty()
 
     Scaffold(topBar = {
-        TopAppBar(title = { Text("Booked Dates") }, navigationIcon = {
-            TextButton(onClick = onBack) { Text("Back") }
-        })
+        TopAppBar(
+            title = { Text("Booked Dates") },
+            navigationIcon = {
+                TextButton(
+                    onClick = onBack,
+                    modifier = Modifier.testTag("owner_calendar_back")
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Spacer(Modifier.width(4.dp))
+                    Text("Back")
+                }
+            }
+        )
     }) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
