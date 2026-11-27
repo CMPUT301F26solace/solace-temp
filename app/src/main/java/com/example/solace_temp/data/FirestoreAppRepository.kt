@@ -27,6 +27,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 /**
  * Implementation of [AppRepository] using Firebase Firestore as the backend.
@@ -230,7 +234,45 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     private fun listenToReservations() {
         db.collection("reservations").addSnapshotListener { snapshot, error ->
             if (error != null || snapshot == null) return@addSnapshotListener
-            _reservations.value = snapshot.toObjects(Reservation::class.java)
+            _reservations.value = snapshot.documents.mapNotNull { doc ->
+                try {
+                    doc.toObject(Reservation::class.java)?.let { res ->
+                        if (res.id.isBlank()) res.copy(id = doc.id) else res
+                    }
+                } catch (e: Exception) {
+                    Log.w("FirestoreRepo", "Fallback parsing reservation ${doc.id}", e)
+                    val rawStatus = doc.getString("status").orEmpty()
+                    val mappedStatus = when (rawStatus.uppercase()) {
+                        "CONFIRMED", "ACTIVE" -> ReservationStatus.ACTIVE
+                        "CANCELLED" -> ReservationStatus.CANCELLED
+                        "INVITED" -> ReservationStatus.INVITED
+                        "PAST" -> ReservationStatus.PAST
+                        "REJECTED" -> ReservationStatus.REJECTED
+                        else -> ReservationStatus.ACTIVE
+                    }
+                    val campsiteId = doc.getString("campsiteId").orEmpty()
+                    val campsiteName = doc.getString("campsiteName")
+                        ?: _campsites.value.find { it.id == campsiteId }?.name.orEmpty()
+                    val bookedDates = (doc.get("bookedDates") as? List<*>)
+                        ?.mapNotNull { it as? String }
+                        ?: listOfNotNull(
+                            doc.getString("startDate"),
+                            doc.getString("endDate")
+                        ).filter { it.isNotBlank() }
+
+                    Reservation(
+                        id = doc.id,
+                        campsiteId = campsiteId,
+                        campsiteName = campsiteName,
+                        entrantId = doc.getString("entrantId").orEmpty(),
+                        ownerId = doc.getString("ownerId").orEmpty(),
+                        bookedDates = bookedDates,
+                        status = mappedStatus,
+                        agreedToRules = doc.getBoolean("agreedToRules") ?: true,
+                        cancelledAtMillis = doc.getLong("cancelledAtMillis")
+                    )
+                }
+            }
         }
     }
 
@@ -741,23 +783,203 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         endDate: String
     ): Boolean {
         if (deviceId.isBlank()) return false
+        val bookedDates = expandIsoDateRange(startDate, endDate)
+        if (bookedDates.isEmpty()) return false
+
         return try {
-            val reservationData = hashMapOf(
-                "reservationId" to UUID.randomUUID().toString(),
-                "campsiteId" to campsiteId,
-                "entrantId" to deviceId,
-                "startDate" to startDate,
-                "endDate" to endDate,
-                "status" to "CONFIRMED",
-                "createdAt" to System.currentTimeMillis()
-            )
-            db.collection("reservations").add(reservationData).await()
-            db.collection("notifications").document(notificationId).delete().await()
+            val campsite = _campsites.value.find { it.id == campsiteId }
+            val reservationId = "res-${UUID.randomUUID().toString().take(8)}"
+            val reservationRef = db.collection("reservations").document(reservationId)
+            val notificationRef = db.collection("notifications").document(notificationId)
+            val slotRefs = bookedDates.map { day ->
+                db.collection("reservationSlots").document("${campsiteId}_$day")
+            }
+
+            // Atomically verify all requested dates are free, save the reservation, and claim each date slot
+            db.runTransaction { tx ->
+                val occupied = slotRefs.any { tx.get(it).exists() }
+                if (occupied) {
+                    throw IllegalStateException("One or more selected dates are already booked.")
+                }
+
+                val reservation = Reservation(
+                    id = reservationId,
+                    campsiteId = campsiteId,
+                    campsiteName = campsite?.name.orEmpty(),
+                    entrantId = deviceId,
+                    ownerId = campsite?.ownerId.orEmpty(),
+                    bookedDates = bookedDates,
+                    status = ReservationStatus.ACTIVE,
+                    agreedToRules = true
+                )
+
+                tx.set(reservationRef, reservation)
+                slotRefs.forEachIndexed { index, slotRef ->
+                    tx.set(
+                        slotRef,
+                        mapOf(
+                            "reservationId" to reservationId,
+                            "campsiteId" to campsiteId,
+                            "date" to bookedDates[index]
+                        )
+                    )
+                }
+                if (notificationId.isNotBlank()) {
+                    tx.delete(notificationRef)
+                }
+                true
+            }.await()
             true
         } catch (e: Exception) {
             Log.e("FirestoreRepo", "Error creating reservation", e)
             false
         }
+    }
+
+    /** Expands an inclusive YYYY-MM-DD range into individual ISO date strings (up to 60 days). */
+    private fun expandIsoDateRange(startDate: String, endDate: String): List<String> {
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+            isLenient = false
+        }
+        val start = runCatching { formatter.parse(startDate.trim()) }.getOrNull() ?: return emptyList()
+        val end = runCatching { formatter.parse(endDate.trim()) }.getOrNull() ?: return emptyList()
+        if (end.before(start)) return emptyList()
+
+        val calendar = Calendar.getInstance().apply { time = start }
+        val dates = mutableListOf<String>()
+        while (!calendar.time.after(end) && dates.size < 60) {
+            dates.add(formatter.format(calendar.time))
+            calendar.add(Calendar.DAY_OF_MONTH, 1)
+        }
+        return dates
+    }
+
+    /**
+     * Cancels an active reservation in Firestore, frees its booked night slots, and records a
+     * cancellation confirmation notification in the entrant's in-app notification log.
+     *
+     * Notification delivery is executed after the cancellation batch commits so that if
+     * notification creation fails, the UI can inform the entrant cleanly without hiding the
+     * completed cancellation or blocking CSV export.
+     *
+     * @param reservationId The unique confirmation ID of the reservation to cancel.
+     * @param onResult Callback reporting the [CancellationOutcome] or a cancellation failure.
+     */
+    override fun cancelReservation(
+        reservationId: String,
+        onResult: (Result<CancellationOutcome>) -> Unit
+    ) {
+        if (deviceId.isBlank()) {
+            onResult(Result.failure(IllegalStateException("Device profile unavailable. Please reopen the app.")))
+            return
+        }
+
+        val target = _reservations.value.find { it.id == reservationId }
+        when {
+            target == null || target.id.isBlank() -> {
+                onResult(Result.failure(NoSuchElementException("Reservation could not be found.")))
+                return
+            }
+            target.entrantId != deviceId -> {
+                onResult(Result.failure(SecurityException("You can only cancel your own reservations.")))
+                return
+            }
+            target.status != ReservationStatus.ACTIVE -> {
+                onResult(Result.failure(IllegalStateException("This reservation is already ${target.status.name.lowercase()}.")))
+                return
+            }
+            !target.isUpcomingAndCancellable() -> {
+                onResult(Result.failure(IllegalStateException("Only upcoming active reservations can be cancelled.")))
+                return
+            }
+        }
+
+        val cancelledAt = System.currentTimeMillis()
+        val cancelledReservation = target.copy(
+            status = ReservationStatus.CANCELLED,
+            cancelledAtMillis = cancelledAt
+        )
+
+        // Atomically mark the reservation CANCELLED and free its reserved night slots
+        val batch = db.batch()
+        val reservationRef = db.collection("reservations").document(target.id)
+        batch.update(
+            reservationRef,
+            mapOf(
+                "status" to ReservationStatus.CANCELLED.name,
+                "cancelledAtMillis" to cancelledAt
+            )
+        )
+        target.bookedDates.forEach { day ->
+            val slotRef = db.collection("reservationSlots").document("${target.campsiteId}_$day")
+            batch.delete(slotRef)
+        }
+
+        batch.commit()
+            .addOnSuccessListener {
+                // Optimistically update local reservation state so the UI reflects cancellation immediately
+                _reservations.update { list ->
+                    list.map { if (it.id == target.id) cancelledReservation else it }
+                }
+
+                // Build the cancellation confirmation notification with campsite name, dates, and confirmation ID
+                val dateSummary = when {
+                    cancelledReservation.bookedDates.isEmpty() -> "Dates not specified"
+                    cancelledReservation.bookedDates.size == 1 -> cancelledReservation.bookedDates.first()
+                    else -> "${cancelledReservation.bookedDates.first()} to ${cancelledReservation.bookedDates.last()}"
+                }
+                val formattedTime = SimpleDateFormat("MMM dd, yyyy · h:mm a", Locale.getDefault())
+                    .format(Date(cancelledAt))
+                val siteName = cancelledReservation.campsiteName.ifBlank { "Campsite Reservation" }
+                val notifId = "notif-cancel-${cancelledReservation.id}"
+
+                val confirmationNotification = AppNotification(
+                    id = notifId,
+                    recipientId = deviceId,
+                    senderId = cancelledReservation.ownerId.ifBlank { "system" },
+                    campsiteId = cancelledReservation.campsiteId,
+                    title = "Reservation Cancelled",
+                    message = "Your booking at $siteName ($dateSummary) has been cancelled. Confirmation ID: ${cancelledReservation.id}.",
+                    timestamp = formattedTime,
+                    isLotteryWin = false,
+                    isSeen = false
+                )
+
+                // Persist the confirmation notification to the entrant's Firestore notification log
+                db.collection("notifications")
+                    .document(notifId)
+                    .set(confirmationNotification)
+                    .addOnSuccessListener {
+                        onResult(
+                            Result.success(
+                                CancellationOutcome(
+                                    cancelledReservation = cancelledReservation,
+                                    notificationDelivered = true
+                                )
+                            )
+                        )
+                    }
+                    .addOnFailureListener { notifError ->
+                        Log.e("FirestoreRepo", "Cancellation notification delivery failed for ${target.id}", notifError)
+                        onResult(
+                            Result.success(
+                                CancellationOutcome(
+                                    cancelledReservation = cancelledReservation,
+                                    notificationDelivered = false,
+                                    notificationError = "Reservation cancelled, but the confirmation notification failed to send (${notifError.localizedMessage ?: "network error"}). You can still export your CSV record."
+                                )
+                            )
+                        )
+                    }
+            }
+            .addOnFailureListener { error ->
+                Log.e("FirestoreRepo", "Failed to cancel reservation ${target.id}", error)
+                onResult(
+                    Result.failure(
+                        Exception("Could not cancel reservation: ${error.localizedMessage ?: "Please try again."}", error)
+                    )
+                )
+            }
     }
 
     /**
