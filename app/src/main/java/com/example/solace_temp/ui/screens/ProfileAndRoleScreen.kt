@@ -49,7 +49,8 @@ import com.example.solace_temp.validation.ProfileValidator
 @Composable
 fun ProfileAndRoleScreen(
     repository: AppRepository,
-    onNavigateToPolicy: () -> Unit = {}
+    onNavigateToPolicy: () -> Unit = {},
+    onNavigateToReservations: () -> Unit = {}
 ) {
     val profile by repository.currentProfile.collectAsState()
     var name by remember(profile.name) { mutableStateOf(profile.name) }
@@ -180,6 +181,16 @@ fun ProfileAndRoleScreen(
                         color = if (message == "Profile updated.") MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
                         modifier = Modifier.testTag("profile_save_feedback")
                     )
+                }
+
+                if (profile.role == UserRole.ENTRANT) {
+                    Button(
+                        onClick = onNavigateToReservations,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("My Reservations")
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
 
                 Spacer(Modifier.height(4.dp))
