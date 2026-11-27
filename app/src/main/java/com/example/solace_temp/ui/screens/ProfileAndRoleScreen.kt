@@ -133,8 +133,19 @@ fun ProfileAndRoleScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Receive Notifications")
-                    Switch(checked = receiveNotifs, onCheckedChange = { receiveNotifs = it })
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Receive Notifications")
+                        Text(
+                            text = "Turn off to stop alerts. Lottery invitations and reservations still appear in the app.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                    Switch(
+                        checked = receiveNotifs,
+                        onCheckedChange = { receiveNotifs = it },
+                        modifier = Modifier.testTag("profile_notifications_toggle")
+                    )
                 }
 
                 Button(
