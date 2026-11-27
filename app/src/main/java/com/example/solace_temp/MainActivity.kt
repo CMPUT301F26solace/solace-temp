@@ -312,16 +312,18 @@ fun SolaceCampsiteApp() {
                     CampsiteReservationScreen(
                         campsiteId = campsiteId,
                         notificationId = notificationId,
-                        onReservationConfirmed = {
+                        onReservationConfirmed = { startDate, endDate, onError ->
                             scope.launch {
                                 val success = repository.createReservation(
                                     campsiteId = campsiteId,
                                     notificationId = notificationId,
-                                    startDate = "2026-07-01",
-                                    endDate = "2026-07-07"
+                                    startDate = startDate,
+                                    endDate = endDate
                                 )
                                 if (success) {
                                     navController.popBackStack()
+                                } else {
+                                    onError("Could not confirm booking. One or more selected dates may already be booked.")
                                 }
                             }
                         },
@@ -333,7 +335,8 @@ fun SolaceCampsiteApp() {
 
                 composable(AppScreen.EntrantReservations.route) {
                     EntrantReservationsScreen(
-                        repository = repository
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
                     )
                 }
 
@@ -426,7 +429,8 @@ fun SolaceCampsiteApp() {
                 composable(BottomNavItem.ProfileTab.route) {
                     ProfileAndRoleScreen(
                         repository = repository,
-                        onNavigateToPolicy = { navController.navigate("policy_and_guidelines") }
+                        onNavigateToPolicy = { navController.navigate("policy_and_guidelines") },
+                        onNavigateToReservations = { navController.navigate(AppScreen.EntrantReservations.route) }
                     )
                 }
                 composable("policy_and_guidelines") {

@@ -8,6 +8,8 @@
  */
 package com.example.solace_temp.models
 
+import com.google.firebase.firestore.PropertyName
+
 /**
  * Defines the roles a user can assume within the application.
  */
@@ -189,7 +191,8 @@ data class Reservation(
     val ownerId: String = "",
     val bookedDates: List<String> = emptyList(),
     val status: ReservationStatus = ReservationStatus.ACTIVE,
-    val agreedToRules: Boolean = true
+    val agreedToRules: Boolean = true,
+    val cancelledAtMillis: Long? = null
 )
 
 /**
@@ -213,7 +216,9 @@ data class AppNotification(
     val title: String = "",
     val message: String = "",
     val timestamp: String = "Today · 9:12 AM",
+    @get:PropertyName("isLotteryWin")
     val isLotteryWin: Boolean = false,
+    @get:PropertyName("isSeen")
     val isSeen: Boolean = false
 )
 
@@ -255,3 +260,32 @@ data class AdminAuditAccessLog(
     val timestampMillis: Long = System.currentTimeMillis(),
     val actionDescription: String = "Reviewed conversation thread history"
 )
+
+/**
+ * Encapsulates the result of an entrant cancelling a campsite reservation.
+ * Separates the database cancellation from confirmation notification delivery so the UI
+ * can surface clear error feedback if notification delivery fails.
+ *
+ * @property cancelledReservation The updated [Reservation] marked as [ReservationStatus.CANCELLED].
+ * @property notificationDelivered True if the cancellation confirmation was logged in the entrant's notifications.
+ * @property notificationError Optional human-readable error message when notification delivery fails.
+ */
+data class CancellationOutcome(
+    val cancelledReservation: Reservation,
+    val notificationDelivered: Boolean,
+    val notificationError: String? = null
+)
+
+/**
+ * Returns true if this reservation is ACTIVE and its earliest booked date is today or in the future.
+ * Expects ISO-8601 date strings ("yyyy-MM-dd"); defaults to eligible if dates are missing or unparsed.
+ */
+fun Reservation.isUpcomingAndCancellable(
+    todayIso: String = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        .format(java.util.Date())
+): Boolean {
+    if (status != ReservationStatus.ACTIVE) return false
+    val earliestDate = bookedDates.minOrNull() ?: return true
+    if (!earliestDate.matches(Regex("""\d{4}-\d{2}-\d{2}"""))) return true
+    return earliestDate >= todayIso
+}
