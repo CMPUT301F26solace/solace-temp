@@ -1,3 +1,11 @@
+/**
+ * EntrantLotteryPlaceholderScreen.kt
+ * 
+ * Purpose: Composable screen for entrants to view lottery details, manage waiting list participation, and confirm bookings upon winning.
+ * 
+ * Issues / Outstanding Issues:
+ * - Winning entrant date picker requires selecting dates strictly within the allowed booking window.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background

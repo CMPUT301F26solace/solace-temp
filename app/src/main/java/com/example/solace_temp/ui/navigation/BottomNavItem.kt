@@ -1,3 +1,11 @@
+/**
+ * BottomNavItem.kt
+ * 
+ * Purpose: Defines navigation bar items, routes, labels, and icons for entrant, owner, and admin user roles.
+ * 
+ * Issues / Outstanding Issues:
+ * - None currently known.
+ */
 package com.example.solace_temp.ui.navigation
 
 import androidx.compose.material.icons.Icons
@@ -52,9 +60,27 @@ sealed class BottomNavItem(val route: String, val label: String, val icon: Image
  * Returns a list of [BottomNavItem]s that correspond to the specified user role.
  * 
  * @param role The [UserRole] to retrieve navigation items for.
- * @return A list of valid [BottomNavItem]s for the provided role.
+ * @param isAdmin Indicates whether the current user has verified admin privileges.
+ * @return A list of valid [BottomNavItem]s for the provided role and privilege status.
  */
-fun getBottomNavItemsForRole(role: UserRole): List<BottomNavItem> {
+fun getBottomNavItemsForRole(role: UserRole, isAdmin: Boolean = true): List<BottomNavItem> {
+    if (!isAdmin) {
+        return when (role) {
+            UserRole.CAMPSITE_OWNER -> listOf(
+                BottomNavItem.OwnerCampsites,
+                BottomNavItem.OwnerCreate,
+                BottomNavItem.OwnerLottery,
+                BottomNavItem.ProfileTab
+            )
+            else -> listOf(
+                BottomNavItem.EntrantHome,
+                BottomNavItem.EntrantSearch,
+                BottomNavItem.EntrantQrScan,
+                BottomNavItem.EntrantNotifications,
+                BottomNavItem.ProfileTab
+            )
+        }
+    }
     return when (role) {
         UserRole.ENTRANT -> listOf(
             BottomNavItem.EntrantHome,

@@ -1,3 +1,11 @@
+/**
+ * ProfileAndRoleScreen.kt
+ * 
+ * Purpose: Composable screen allowing users to edit profile information and toggle active roles (Entrant, Campsite Owner, Admin).
+ * 
+ * Issues / Outstanding Issues:
+ * - Role switching instantly updates local and remote profile state for immediate UI testing.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background

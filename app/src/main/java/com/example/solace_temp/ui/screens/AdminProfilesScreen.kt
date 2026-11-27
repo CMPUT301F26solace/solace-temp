@@ -1,3 +1,11 @@
+/**
+ * AdminProfilesScreen.kt
+ * 
+ * Purpose: Provides an administrative moderation view for searching, filtering, and updating user account statuses (US 03.02.01).
+ * 
+ * Issues / Outstanding Issues:
+ * - Suspending a profile does not automatically revoke active session tokens in non-Firebase dev environments.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background
@@ -69,7 +77,7 @@ fun AdminProfilesScreen(
     var dateFilterEnd by remember { mutableStateOf<Long?>(null) }
 
     // Acceptance Criteria: Only users with verified administrator credentials can access
-    if (currentProfile.role != UserRole.ADMIN) {
+    if (!currentProfile.isAdmin || currentProfile.role != UserRole.ADMIN) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Access Denied: Administrator credentials required.", color = MaterialTheme.colorScheme.error)
         }

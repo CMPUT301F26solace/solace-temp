@@ -1,3 +1,11 @@
+/**
+ * OwnerLotteriesScreen.kt
+ * 
+ * Purpose: Composable screen for campsite owners to view and manage waiting list lotteries across their registered campsites.
+ * 
+ * Issues / Outstanding Issues:
+ * - Displays only lotteries associated with campsites owned by the currently logged-in owner profile.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background

@@ -1,3 +1,12 @@
+/**
+ * OwnerCalendarScreen.kt
+ * 
+ * Purpose: Composable screen displaying a read-only monthly calendar view of booked, blocked, and available
+ * dates for a campsite owner's registered properties.
+ * 
+ * Issues / Outstanding Issues:
+ * - Calendar grid navigation currently moves one month at a time; year view jumping is not yet supported.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background
