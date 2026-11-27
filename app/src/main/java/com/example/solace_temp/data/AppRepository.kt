@@ -296,12 +296,82 @@ interface AppRepository {
      * @param lotteryId The unique ID of the lottery.
      */
     fun redrawLottery(lotteryId: String)
-    
+
+    /** Administrative audit log recording campsite deletion events (US 03.01.01). */
+    val adminCampsiteDeletionLogs: StateFlow<List<AdminCampsiteDeletionLog>>
+        get() = MutableStateFlow(emptyList())
+
+    /**
+     * Inspects active reservations, open-window lotteries, unfulfilled waitlists, media, and QR codes
+     * linked to a campsite before an admin confirms removal (US 03.01.01).
+     *
+     * @param campsiteId The unique ID of the campsite being evaluated for deletion.
+     * @return A [CampsiteRemovalDependencies] snapshot detailing all impacted records.
+     */
+    fun getCampsiteRemovalDependencies(campsiteId: String): CampsiteRemovalDependencies {
+        val site = campsites.value.find { it.id == campsiteId }
+
+        // Identify currently active reservations that would be disrupted by deletion
+        val activeReservations = reservations.value
+            .filter { it.campsiteId == campsiteId && it.status == ReservationStatus.ACTIVE }
+            .map { it.id }
+
+        // Identify all lotteries referencing this campsite and separate out open registration windows
+        val linkedLotteries = lotteries.value.filter { campsiteId in it.campsiteIds }
+        val openLotteries = linkedLotteries
+            .filter { canJoinLottery(it) }
+            .map { it.id }
+
+        // Count unfulfilled waitlist entries across undrawn or active lotteries
+        val unfulfilledWaitlistCount = linkedLotteries
+            .filter { !it.isDrawn || it.waitingListEntrantIds.isNotEmpty() }
+            .sumOf { it.waitingListEntrantIds.size }
+
+        return CampsiteRemovalDependencies(
+            activeReservationIds = activeReservations,
+            openLotteryIds = openLotteries,
+            affectedLotteryIds = linkedLotteries.map { it.id },
+            totalWaitlistedEntrants = unfulfilledWaitlistCount,
+            hasMediaAsset = !site?.imageUrl.isNullOrBlank(),
+            hasQrCode = !site?.qrCodePayload.isNullOrBlank()
+        )
+    }
     /**
      * Deletes a campsite from the platform. Requires Admin privileges.
+     * Kept for backward compatibility with existing callers and test fakes.
+     *
      * @param campsiteId The unique ID of the campsite to remove.
      */
     fun removeCampsiteAsAdmin(campsiteId: String)
+
+    /**
+     * Removes a campsite as an administrator with full dependency safety checks, cleanup,
+     * and audit logging (US 03.01.01).
+     *
+     * @param campsiteId The unique ID of the campsite to remove.
+     * @param forceOverride Must be true to cancel active reservations or close open-window lotteries.
+     * @param onResult Callback reporting success or a descriptive failure reason to the UI.
+     */
+    fun removeCampsiteAsAdmin(
+        campsiteId: String,
+        forceOverride: Boolean = false,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val result = runCatching {
+            val profile = currentProfile.value
+            require(profile.isAdmin && profile.role == UserRole.ADMIN) {
+                "Access Denied: Verified administrator privileges are required."
+            }
+            val deps = getCampsiteRemovalDependencies(campsiteId)
+            if (deps.requiresOverrideWarning && !forceOverride) {
+                throw IllegalStateException(
+                    "Campsite has active reservations or open lotteries. Explicit override required."
+                )
+            }
+            removeCampsiteAsAdmin(campsiteId)
+        }
+        onResult(result)
+    }
 
     /**
      * Declines a lottery invitation for an entrant and updates notification state.
@@ -349,6 +419,13 @@ object MockAppRepository : AppRepository {
 
     /** Exposes the mock list of profiles. */
     override val profiles: StateFlow<List<Profile>> = _profiles.asStateFlow()
+
+    /** Internal state flow holding mock campsite deletion audit records (US 03.01.01). */
+    private val _adminCampsiteDeletionLogs = MutableStateFlow<List<AdminCampsiteDeletionLog>>(emptyList())
+
+    /** Exposes the mock campsite deletion audit logs. */
+    override val adminCampsiteDeletionLogs: StateFlow<List<AdminCampsiteDeletionLog>> =
+        _adminCampsiteDeletionLogs.asStateFlow()
 
     /** Internal state flow holding the mock campsites list. */
     private val _campsites = MutableStateFlow(
@@ -809,9 +886,93 @@ object MockAppRepository : AppRepository {
         }
     }
 
-    /** Simulates removing a campsite in the mock state. */
+    /** delegates to the full admin removal pipeline. */
     override fun removeCampsiteAsAdmin(campsiteId: String) {
+        removeCampsiteAsAdmin(campsiteId, forceOverride = true) {}
+    }
+
+    /**
+     * Simulates verified admin campsite removal in memory, including dependency checks,
+     * waitlist/lottery cleanup, active reservation cancellation, and audit logging (US 03.01.01).
+     */
+    override fun removeCampsiteAsAdmin(
+        campsiteId: String,
+        forceOverride: Boolean,
+        onResult: (Result<Unit>) -> Unit
+    ) {
+        val admin = _currentProfile.value
+        if (!admin.isAdmin || admin.role != UserRole.ADMIN) {
+            onResult(Result.failure(SecurityException("Access Denied: Administrator privileges required.")))
+            return
+        }
+
+        val targetSite = _campsites.value.find { it.id == campsiteId }
+        if (targetSite == null) {
+            onResult(Result.failure(NoSuchElementException("Campsite not found.")))
+            return
+        }
+
+        // Guard against deleting a campsite with active reservations or open lotteries without override
+        val deps = getCampsiteRemovalDependencies(campsiteId)
+        if (deps.requiresOverrideWarning && !forceOverride) {
+            onResult(
+                Result.failure(
+                    IllegalStateException(
+                        "Cannot remove campsite while active reservations or open lotteries exist without override."
+                    )
+                )
+            )
+            return
+        }
+
+        // 1. Cancel any active reservations linked to this campsite when override is confirmed
+        if (deps.activeReservationIds.isNotEmpty()) {
+            _reservations.update { list ->
+                list.map { res ->
+                    if (res.id in deps.activeReservationIds) {
+                        res.copy(status = ReservationStatus.CANCELLED)
+                    } else res
+                }
+            }
+        }
+
+        // 2. Clean up associated lotteries and unfulfilled waitlists
+        _lotteries.update { list ->
+            list.mapNotNull { lottery ->
+                if (campsiteId !in lottery.campsiteIds) {
+                    lottery
+                } else if (lottery.campsiteIds.size <= 1) {
+                    // Single-campsite lottery: remove it completely along with its unfulfilled waitlist
+                    null
+                } else {
+                    // Multi-campsite lottery: detach only the deleted campsite
+                    lottery.copy(campsiteIds = lottery.campsiteIds - campsiteId)
+                }
+            }
+        }
+
+        // 3. Remove pending notifications tied to the removed campsite
+        _notifications.update { list -> list.filterNot { it.campsiteId == campsiteId } }
+
+        // 4. Delete the campsite record (invalidates QR deep link and removes from all listings)
         _campsites.update { list -> list.filterNot { it.id == campsiteId } }
+
+        // 5. Record the administrative deletion in the audit log
+        val auditEntry = AdminCampsiteDeletionLog(
+            id = "del-${UUID.randomUUID().toString().take(8)}",
+            adminId = admin.deviceId,
+            adminName = admin.name.ifBlank { "Admin" },
+            campsiteId = targetSite.id,
+            campsiteName = targetSite.name,
+            ownerId = targetSite.ownerId,
+            timestampMillis = System.currentTimeMillis(),
+            overrideUsed = deps.requiresOverrideWarning && forceOverride,
+            cancelledReservationIds = deps.activeReservationIds,
+            cleanedLotteryIds = deps.affectedLotteryIds
+        )
+        _adminCampsiteDeletionLogs.update { it + auditEntry }
+
+        onResult(Result.success(Unit))
     }
 
     override suspend fun declineLotteryInvitation(notificationId: String, campsiteId: String) {
