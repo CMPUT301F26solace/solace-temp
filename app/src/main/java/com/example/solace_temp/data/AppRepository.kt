@@ -257,6 +257,20 @@ interface AppRepository {
     fun drawLotteryWinners(lotteryId: String)
 
     /**
+     * Automatically triggers winner drawing for all lotteries whose registration
+     * deadline has passed and winners have not been drawn yet.
+     */
+    fun triggerExpiredLotteryDraws() {
+        val now = System.currentTimeMillis()
+        lotteries.value.filter { lottery ->
+            val endMillis = lottery.registrationEndMillis
+            endMillis != null && endMillis <= now && !lottery.isDrawn
+        }.forEach { lottery ->
+            drawLotteryWinners(lottery.id)
+        }
+    }
+
+    /**
      * Redraws or picks backup winners for a specific lottery.
      * @param lotteryId The unique ID of the lottery.
      */
@@ -349,6 +363,13 @@ interface AppRepository {
         startDate: String,
         endDate: String
     ): Boolean
+
+    /**
+     * Marks notifications as seen by the current entrant.
+     *
+     * @param notificationIds List of notification IDs to update to seen status.
+     */
+    fun markNotificationsAsSeen(notificationIds: List<String>) {}
 }
 
 /**
@@ -698,27 +719,69 @@ object MockAppRepository : AppRepository {
 
     /** Simulates drawing winners for a mock lottery. */
     override fun drawLotteryWinners(lotteryId: String) {
+        val targetLottery = _lotteries.value.find { it.id == lotteryId } ?: return
+        if (targetLottery.isDrawn && targetLottery.invitedWinnerIds.isNotEmpty()) {
+            return
+        }
+        val count = minOf(targetLottery.waitingListEntrantIds.size, targetLottery.maxWinners)
+        val winners = targetLottery.waitingListEntrantIds.shuffled().take(count)
+
         _lotteries.update { list ->
             list.map {
                 if (it.id == lotteryId) {
-                    val count = minOf(it.waitingListEntrantIds.size, it.maxWinners)
-                    val winners = it.waitingListEntrantIds.shuffled().take(count)
                     it.copy(invitedWinnerIds = winners, isDrawn = true)
                 } else it
             }
         }
+
+        sendWinnerNotifications(targetLottery, winners)
     }
 
     /** Simulates redrawing winners from backup or remaining waitlist for a mock lottery. */
     override fun redrawLottery(lotteryId: String) {
+        val targetLottery = _lotteries.value.find { it.id == lotteryId } ?: return
+        val remaining = targetLottery.waitingListEntrantIds.filter { id -> id !in targetLottery.invitedWinnerIds }
+        val needed = targetLottery.maxWinners - targetLottery.invitedWinnerIds.size
+        if (needed <= 0) return
+        val newWinners = remaining.shuffled().take(needed)
+
         _lotteries.update { list ->
             list.map {
                 if (it.id == lotteryId) {
-                    val remaining = it.waitingListEntrantIds.filter { id -> id !in it.invitedWinnerIds }
-                    val needed = it.maxWinners - it.invitedWinnerIds.size
-                    val newWinners = remaining.shuffled().take(needed)
                     it.copy(invitedWinnerIds = it.invitedWinnerIds + newWinners, isDrawn = true)
                 } else it
+            }
+        }
+
+        sendWinnerNotifications(targetLottery, newWinners)
+    }
+
+    private fun sendWinnerNotifications(lottery: Lottery, winnerIds: List<String>) {
+        if (winnerIds.isEmpty()) return
+        val campsiteId = lottery.campsiteIds.firstOrNull().orEmpty()
+        val campsiteName = _campsites.value.find { it.id == campsiteId }?.name ?: lottery.name
+
+        val newNotifications = winnerIds.mapNotNull { winnerId ->
+            val notifId = "notif-${lottery.id}-$winnerId"
+            if (_notifications.value.any { it.id == notifId }) {
+                null
+            } else {
+                AppNotification(
+                    id = notifId,
+                    recipientId = winnerId,
+                    senderId = lottery.ownerId,
+                    campsiteId = campsiteId,
+                    title = "You won the lottery!",
+                    message = "$campsiteName · A spot is yours! Accept your invitation to confirm your campsite dates.",
+                    timestamp = "Just now",
+                    isLotteryWin = true
+                )
+            }
+        }
+        if (newNotifications.isNotEmpty()) {
+            _notifications.update { current ->
+                val existingIds = current.map { it.id }.toSet()
+                current + newNotifications.filter { it.id !in existingIds }
             }
         }
     }
@@ -825,6 +888,14 @@ object MockAppRepository : AppRepository {
     }
     fun updateNotifications(newList: List<AppNotification>) {
         _notifications.value = newList
+    }
+
+    /** Marks specified notifications as seen in the mock state. */
+    override fun markNotificationsAsSeen(notificationIds: List<String>) {
+        val targetIds = notificationIds.toSet()
+        _notifications.update { list ->
+            list.map { if (it.id in targetIds) it.copy(isSeen = true) else it }
+        }
     }
 
     override suspend fun createReservation(

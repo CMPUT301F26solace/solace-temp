@@ -27,7 +27,22 @@ internal fun bookingNights(checkInMillis: Long, checkOutMillis: Long): List<Stri
     }
 }
 
-/** Validates winner eligibility, booking dates, and existing reservations. */
+/**
+ * Validates winner eligibility, booking date availability, and existing reservations.
+ *
+ * An entrant selected in the lottery can book dates within the campsite's allowed booking window
+ * as soon as they win the lottery. The booking window defines when the campsite is available to stay,
+ * not a waiting period during which winners are prohibited from confirming their reservation.
+ *
+ * @param campsite The [Campsite] being booked.
+ * @param lottery The [Lottery] associated with the campsite.
+ * @param entrantId The device ID of the entrant attempting the booking.
+ * @param checkInMillis The check-in timestamp in milliseconds (UTC midnight).
+ * @param checkOutMillis The check-out timestamp in milliseconds (UTC midnight).
+ * @param reservations Current list of existing [Reservation]s to check for night collisions.
+ * @param nowMillis The current timestamp in milliseconds, used to prevent check-ins in the past.
+ * @return An error message describing why the booking is invalid, or `null` if valid.
+ */
 internal fun bookingValidationError(
     campsite: Campsite,
     lottery: Lottery,
@@ -46,10 +61,6 @@ internal fun bookingValidationError(
             "Only entrants selected in the lottery can confirm a reservation."
         checkInMillis < (nowMillis / DAY_MILLIS) * DAY_MILLIS ->
             "Check-in date cannot be in the past."
-        lottery.bookingStartMillis != null && nowMillis < lottery.bookingStartMillis ->
-            "The lottery booking period has not started yet."
-        lottery.bookingEndMillis != null && nowMillis > lottery.bookingEndMillis + DAY_MILLIS - 1L ->
-            "The lottery booking period has ended."
         checkInMillis < (campsite.bookingStartDateMillis ?: lottery.bookingStartMillis ?: 0L) ||
             checkOutMillis > (campsite.bookingEndDateMillis ?: lottery.bookingEndMillis ?: Long.MAX_VALUE) ->
             "Selected dates are outside the allowed campsite booking dates."

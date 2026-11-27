@@ -38,6 +38,16 @@ fun EntrantNotificationsScreen(
         it.recipientId.isBlank() || it.recipientId == profile.deviceId
     }
 
+    // Automatically mark unread notifications as seen when viewing the notifications screen
+    val unseenIds = remember(userNotifications) {
+        userNotifications.filter { !it.isSeen }.map { it.id }
+    }
+    LaunchedEffect(unseenIds) {
+        if (unseenIds.isNotEmpty()) {
+            repository.markNotificationsAsSeen(unseenIds)
+        }
+    }
+
     Scaffold(
         topBar = { TopAppBar(title = { Text("Notifications", fontWeight = FontWeight.Bold) }) }
     ) { innerPadding ->

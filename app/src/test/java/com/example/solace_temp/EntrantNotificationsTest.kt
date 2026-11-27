@@ -48,4 +48,15 @@ class EntrantNotificationsTest {
         val remaining = MockAppRepository.notifications.value
         assertFalse("Notification should be removed after declining", remaining.any { it.id == initialNotif.id })
     }
+
+    @Test
+    fun testMarkNotificationsAsSeenUpdatesStatus() = runBlocking {
+        val initial = MockAppRepository.notifications.value.first { it.id == testNotification.id }
+        assertFalse("Notification should initially be unseen", initial.isSeen)
+
+        MockAppRepository.markNotificationsAsSeen(listOf(testNotification.id))
+
+        val updated = MockAppRepository.notifications.value.first { it.id == testNotification.id }
+        assertTrue("Notification should be marked as seen", updated.isSeen)
+    }
 }
