@@ -421,7 +421,7 @@ fun SolaceCampsiteApp() {
                     )
                 }
                 composable(BottomNavItem.AdminLogs.route) {
-                    AdminMessageLogsScreen(
+                    AdminLogsTabScreen(
                         repository = repository,
                         onBack = { navController.popBackStack() }
                     )
