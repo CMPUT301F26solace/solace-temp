@@ -295,6 +295,36 @@ data class SystemNotificationLog(
 )
 
 /**
+ * Represents an administrative audit trail record for user profile removals.
+ */
+data class AdminProfileRemovalLog(
+    val id: String = "",
+    val adminId: String = "",
+    val adminName: String = "",
+    val targetUserId: String = "",
+    val targetUserName: String = "",
+    val targetUserEmail: String = "",
+    val reason: String = "Administrative profile removal",
+    val timestampMillis: Long = System.currentTimeMillis()
+)
+
+/**
+ * Represents an administrative audit log entry for campsite owner policy enforcement removals.
+ */
+data class AdminOwnerRemovalLog(
+    val id: String = "",
+    val adminId: String = "",
+    val adminName: String = "",
+    val targetOwnerId: String = "",
+    val targetOwnerName: String = "",
+    val targetOwnerEmail: String = "",
+    val policyViolationReason: String = "",
+    val affectedCampsitesCount: Int = 0,
+    val affectedEntrantsNotifiedCount: Int = 0,
+    val timestampMillis: Long = System.currentTimeMillis()
+)
+
+/**
  * Enum defining the delivery status of a direct message between owner and entrant.
  */
 enum class MessageDeliveryStatus {
