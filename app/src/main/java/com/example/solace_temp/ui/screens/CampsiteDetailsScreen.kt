@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -51,7 +52,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,12 +64,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,10 +76,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -107,6 +111,7 @@ import com.example.solace_temp.ui.theme.Neutral600
 import com.example.solace_temp.ui.theme.Neutral700
 import com.example.solace_temp.ui.theme.Neutral900
 import com.example.solace_temp.ui.theme.OwnerBackground
+import com.example.solace_temp.ui.theme.ScrimDark
 import com.example.solace_temp.ui.theme.SolaceCardShape
 import com.example.solace_temp.ui.theme.SolaceDivider
 import com.example.solace_temp.ui.theme.SolaceInnerCardShape
@@ -134,7 +139,7 @@ import kotlinx.coroutines.launch
  * @param onBack Callback invoked when the user navigates back.
  * @param onSelectLottery Optional callback invoked when the active lottery card is tapped.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CampsiteDetailsScreen(
     campsiteId: String,
@@ -315,89 +320,123 @@ fun CampsiteDetailsScreen(
             }
         }
         val scrollState = rememberScrollState()
-        val isScrolled by remember {
-            derivedStateOf { scrollState.value > 24 }
+        val density = LocalDensity.current
+        val heroHeight = 252.dp
+        val sheetOverlap = 24.dp
+        val toolbarHeight = 64.dp
+        val heroHeightPx = with(density) { heroHeight.toPx() }
+        val collapseDistancePx = with(density) {
+            (heroHeight - sheetOverlap - toolbarHeight).toPx()
+        }.coerceAtLeast(1f)
+        val topHeroScrimBrush = remember {
+            Brush.verticalGradient(colors = listOf(ScrimDark, Color.Transparent))
         }
 
         Scaffold(
             containerColor = OwnerBackground,
-            topBar = {
-                Column {
-                    TopAppBar(
-                        title = {
-                            Text(
-                                text = "Campsite Details",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Neutral900
-                            )
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = triggerBack) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = Neutral900
-                                )
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = OwnerBackground,
-                            titleContentColor = Neutral900
-                        )
-                    )
-                    if (isScrolled) {
-                        SolaceDivider()
-                    }
-                }
-            },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
         ) { padding ->
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
                     .background(OwnerBackground)
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = SolaceTokens.SpaceLG, vertical = SolaceTokens.SpaceSM),
-                verticalArrangement = Arrangement.spacedBy(SolaceTokens.SpaceLG)
             ) {
-                // ── 1. HERO IMAGE BANNER & OVERVIEW CARD ────────────────────────────
-                Card(
-                    shape = SolaceCardShape,
-                    colors = solaceCardColors(),
-                    border = solaceCardBorder(),
-                    elevation = solaceCardElevation(),
-                    modifier = Modifier.fillMaxWidth()
+                // ── COLLAPSING PARALLAX HERO IMAGE LAYER ────────────────────────────
+                // Reads scrollState.value strictly inside graphicsLayer { ... } so
+                // scrolling triggers 0 recompositions.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(heroHeight)
+                        .align(Alignment.TopCenter)
+                        .clipToBounds()
                 ) {
-                    Column {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp)
-                                .background(Neutral100),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (!campsite.imageUrl.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = campsite.imageUrl,
-                                    contentDescription = "Campsite Promotional Image",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                TopographicImageFallback(
-                                    modifier = Modifier.fillMaxSize(),
-                                    showLabel = true,
-                                    label = "No Image Available"
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                val scrollY = scrollState.value.toFloat()
+                                val progress = (scrollY / collapseDistancePx).coerceIn(0f, 1f)
+                                if (reduceMotion) {
+                                    translationY = -scrollY
+                                    scaleX = 1f
+                                    scaleY = 1f
+                                } else {
+                                    translationY = -scrollY * 0.45f
+                                    val zoom = 1f + (progress * 0.08f)
+                                    scaleX = zoom
+                                    scaleY = zoom
+                                }
+                                alpha = (1f - ((scrollY - collapseDistancePx) / (heroHeightPx * 0.25f)).coerceIn(0f, 1f))
+                            }
+                            .background(Neutral100),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!campsite.imageUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = campsite.imageUrl,
+                                contentDescription = "Campsite Promotional Image",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            TopographicImageFallback(
+                                modifier = Modifier.fillMaxSize(),
+                                showLabel = true,
+                                label = "No Image Available"
+                            )
+                        }
+                    }
+
+                    // Subtle top scrim over the hero photo that fades out as the toolbar fades in
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(88.dp)
+                            .align(Alignment.TopCenter)
+                            .graphicsLayer {
+                                val progress = (scrollState.value.toFloat() / collapseDistancePx).coerceIn(0f, 1f)
+                                alpha = 1f - progress
+                            }
+                            .background(topHeroScrimBrush)
+                    )
+                }
+
+                // ── SCROLLING DETAILS SHEET LAYER ───────────────────────────────────
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                ) {
+                    Spacer(Modifier.height(heroHeight - sheetOverlap))
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .drawBehind {
+                                val overlapPx = sheetOverlap.toPx()
+                                drawRect(
+                                    color = OwnerBackground,
+                                    topLeft = Offset(0f, overlapPx),
+                                    size = Size(size.width, (size.height - overlapPx).coerceAtLeast(0f))
                                 )
                             }
-                        }
-
-                        Column(
-                            modifier = Modifier.padding(SolaceTokens.SpaceXL),
-                            verticalArrangement = Arrangement.spacedBy(SolaceTokens.SpaceSM)
+                            .padding(horizontal = SolaceTokens.SpaceLG),
+                        verticalArrangement = Arrangement.spacedBy(SolaceTokens.SpaceLG)
+                    ) {
+                        // ── 1. OVERVIEW CARD ────────────────────────────────────────
+                        Card(
+                            shape = SolaceCardShape,
+                            colors = solaceCardColors(),
+                            border = solaceCardBorder(),
+                            elevation = solaceCardElevation(),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
+                            Column(
+                                modifier = Modifier.padding(SolaceTokens.SpaceXL),
+                                verticalArrangement = Arrangement.spacedBy(SolaceTokens.SpaceSM)
+                            ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -504,7 +543,6 @@ fun CampsiteDetailsScreen(
                             }
                         }
                     }
-                }
 
                 // ── 2. GPS COORDINATES CARD ─────────────────────────────────────────
                 Card(
@@ -1146,7 +1184,78 @@ fun CampsiteDetailsScreen(
                     }
                 }
 
-                Spacer(Modifier.height(SolaceTokens.SpaceLG))
+                        Spacer(Modifier.height(SolaceTokens.SpaceLG))
+                    }
+                }
+
+                // ── COLLAPSING TOP SCRIM & TOOLBAR OVERLAY ──────────────────────────
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(toolbarHeight)
+                        .align(Alignment.TopCenter)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .graphicsLayer {
+                                alpha = (scrollState.value.toFloat() / collapseDistancePx).coerceIn(0f, 1f)
+                            }
+                            .background(OwnerBackground)
+                    )
+                    SolaceDivider(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .graphicsLayer {
+                                alpha = (scrollState.value.toFloat() / collapseDistancePx).coerceIn(0f, 1f)
+                            }
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = SolaceTokens.SpaceSM),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .graphicsLayer {
+                                        val progress = (scrollState.value.toFloat() / collapseDistancePx).coerceIn(0f, 1f)
+                                        alpha = 1f - progress
+                                    }
+                                    .clip(CircleShape)
+                                    .background(CardSurface.copy(alpha = 0.88f))
+                            )
+                            IconButton(onClick = triggerBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = Neutral900
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(SolaceTokens.SpaceXS))
+                        Text(
+                            text = "Campsite Details",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Neutral900,
+                            maxLines = 1,
+                            modifier = Modifier.graphicsLayer {
+                                val progress = (scrollState.value.toFloat() / collapseDistancePx).coerceIn(0f, 1f)
+                                val titleAlpha = ((progress - 0.35f) / 0.65f).coerceIn(0f, 1f)
+                                alpha = titleAlpha
+                                if (!reduceMotion) {
+                                    translationY = (1f - titleAlpha) * 10f
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
 
