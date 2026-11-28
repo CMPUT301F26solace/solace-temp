@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 fun CampsiteReservationScreen(
     campsiteId: String,
     notificationId: String,
-    onReservationConfirmed: () -> Unit,
+    onReservationConfirmed: (startDate: String, endDate: String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -75,7 +75,7 @@ fun CampsiteReservationScreen(
                 Button(
                     onClick = {
                         isSubmitting = true
-                        onReservationConfirmed()
+                        onReservationConfirmed(startDate, endDate)
                     },
                     enabled = !isSubmitting && startDate.isNotBlank() && endDate.isNotBlank(),
                     modifier = Modifier.weight(1f)

@@ -230,26 +230,10 @@ fun SolaceCampsiteApp() {
 
                 // Lottery Notifications & Invitations
                 composable(BottomNavItem.EntrantNotifications.route) {
-                    val scope = rememberCoroutineScope()
                     EntrantNotificationsScreen(
                         repository = repository,
                         onAcceptReservation = { campsiteId, _ ->
                             navController.navigate("campsite_details/$campsiteId")
-                        },
-                        onDeclineReservation = { notificationId, campsiteId ->
-                            scope.launch {
-                                repository.declineLotteryInvitation(notificationId, campsiteId)
-                            }
-                        }
-                    )
-                }
-
-                // Entrant Notifications Destination
-                composable(AppScreen.EntrantNotifications.route) {
-                    EntrantNotificationsScreen(
-                        repository = repository,
-                        onAcceptReservation = { campsiteId, notificationId ->
-                            navController.navigate(AppScreen.CampsiteReservation.createRoute(campsiteId, notificationId))
                         },
                         onDeclineReservation = { notificationId, campsiteId ->
                             scope.launch {
@@ -273,13 +257,13 @@ fun SolaceCampsiteApp() {
                     CampsiteReservationScreen(
                         campsiteId = campsiteId,
                         notificationId = notificationId,
-                        onReservationConfirmed = {
+                        onReservationConfirmed = { startDate, endDate ->
                             scope.launch {
                                 val success = repository.createReservation(
                                     campsiteId = campsiteId,
                                     notificationId = notificationId,
-                                    startDate = "2026-07-01",
-                                    endDate = "2026-07-07"
+                                    startDate = startDate,
+                                    endDate = endDate
                                 )
                                 if (success) {
                                     navController.popBackStack()
