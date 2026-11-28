@@ -197,7 +197,8 @@ data class Reservation(
     val ownerId: String = "",
     val bookedDates: List<String> = emptyList(),
     val status: ReservationStatus = ReservationStatus.ACTIVE,
-    val agreedToRules: Boolean = true
+    val agreedToRules: Boolean = true,
+    val cancelledAtMillis: Long? = null
 )
 
 /**
@@ -212,6 +213,7 @@ data class Reservation(
  * @property timestamp A formatted timestamp for the notification.
  * @property isLotteryWin Indicates if this notification represents a lottery win.
  * @property isSeen Indicates if the notification has been viewed by the recipient.
+ * @property broadcastId ID of the owner broadcast this notification belongs to, or blank if it was sent by the system.
  */
 data class AppNotification(
     val id: String = "",
@@ -221,8 +223,75 @@ data class AppNotification(
     val title: String = "",
     val message: String = "",
     val timestamp: String = "Today · 9:12 AM",
+    @get:PropertyName("isLotteryWin")
     val isLotteryWin: Boolean = false,
-    val isSeen: Boolean = false
+    @get:PropertyName("isSeen")
+    val isSeen: Boolean = false,
+    val broadcastId: String = ""
+)
+
+/**
+ * Record of a message a campsite owner sent to the entrants on a lottery's waitlist.
+ *
+ * @property id Unique identifier for the broadcast.
+ * @property ownerId Device ID of the owner who sent the message.
+ * @property lotteryId ID of the lottery whose waitlist was notified.
+ * @property lotteryName Name of the lottery when the message was sent.
+ * @property campsiteId ID of the lottery's first campsite.
+ * @property campsiteName Name of that campsite when the message was sent.
+ * @property title The notification title.
+ * @property message The full notification message.
+ * @property recipientIds Device IDs of the entrants who received the message.
+ * @property recipientCount Number of entrants who received the message.
+ * @property sentAtMillis Epoch timestamp in milliseconds when the message was sent.
+ */
+data class BroadcastNotification(
+    val id: String = "",
+    val ownerId: String = "",
+    val lotteryId: String = "",
+    val lotteryName: String = "",
+    val campsiteId: String = "",
+    val campsiteName: String = "",
+    val title: String = "",
+    val message: String = "",
+    val recipientIds: List<String> = emptyList(),
+    val recipientCount: Int = 0,
+    val sentAtMillis: Long = System.currentTimeMillis()
+)
+
+/** Enum defining the category/type of platform notification. */
+enum class NotificationType {
+    LOTTERY_DRAW, OWNER_BROADCAST, SYSTEM_UPDATE, RESERVATION_ALERT
+}
+
+/** Enum defining the delivery status of a notification dispatch. */
+enum class NotificationDeliveryStatus {
+    SENT, FAILED, PENDING
+}
+
+/** Enum defining the delivery channel used for a notification. */
+enum class NotificationChannel {
+    IN_APP, PUSH_NOTIFICATION, BOTH
+}
+
+/**
+ * Represents a system-wide notification log entry for administrative review.
+ */
+data class SystemNotificationLog(
+    val id: String = "",
+    val senderId: String = "",
+    val senderName: String = "",
+    val senderRole: UserRole = UserRole.ADMIN,
+    val recipientIds: List<String> = emptyList(),
+    val targetAudienceGroup: String = "Individual User",
+    val campsiteId: String = "",
+    val campsiteName: String = "",
+    val title: String = "",
+    val messageBody: String = "",
+    val type: NotificationType = NotificationType.SYSTEM_UPDATE,
+    val deliveryStatus: NotificationDeliveryStatus = NotificationDeliveryStatus.SENT,
+    val channel: NotificationChannel = NotificationChannel.IN_APP,
+    val timestampMillis: Long = System.currentTimeMillis()
 )
 
 /**
@@ -285,6 +354,35 @@ data class AdminAuditAccessLog(
     val timestampMillis: Long = System.currentTimeMillis(),
     val actionDescription: String = "Reviewed conversation thread history"
 )
+
+/**
+ * Encapsulates the result of an entrant cancelling a campsite reservation.
+ * Separates the database cancellation from confirmation notification delivery so the UI
+ * can surface clear error feedback if notification delivery fails.
+ *
+ * @property cancelledReservation The updated [Reservation] marked as [ReservationStatus.CANCELLED].
+ * @property notificationDelivered True if the cancellation confirmation was logged in the entrant's notifications.
+ * @property notificationError Optional human-readable error message when notification delivery fails.
+ */
+data class CancellationOutcome(
+    val cancelledReservation: Reservation,
+    val notificationDelivered: Boolean,
+    val notificationError: String? = null
+)
+
+/**
+ * Returns true if this reservation is ACTIVE and its earliest booked date is today or in the future.
+ * Expects ISO-8601 date strings ("yyyy-MM-dd"); defaults to eligible if dates are missing or unparsed.
+ */
+fun Reservation.isUpcomingAndCancellable(
+    todayIso: String = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        .format(java.util.Date())
+): Boolean {
+    if (status != ReservationStatus.ACTIVE) return false
+    val earliestDate = bookedDates.minOrNull() ?: return true
+    if (!earliestDate.matches(Regex("""\d{4}-\d{2}-\d{2}"""))) return true
+    return earliestDate >= todayIso
+}
 
 /**
  * Summarizes dependent records associated with a campsite prior to administrative removal (US 03.01.01).

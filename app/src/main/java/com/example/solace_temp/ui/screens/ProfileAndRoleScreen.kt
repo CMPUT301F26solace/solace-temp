@@ -57,7 +57,8 @@ import com.example.solace_temp.validation.ProfileValidator
 @Composable
 fun ProfileAndRoleScreen(
     repository: AppRepository,
-    onNavigateToPolicy: () -> Unit = {}
+    onNavigateToPolicy: () -> Unit = {},
+    onNavigateToReservations: () -> Unit = {}
 ) {
     val profile by repository.currentProfile.collectAsState()
     var name by remember(profile.name) { mutableStateOf(profile.name) }
@@ -141,8 +142,19 @@ fun ProfileAndRoleScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Receive Notifications")
-                    Switch(checked = receiveNotifs, onCheckedChange = { receiveNotifs = it })
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Receive Notifications")
+                        Text(
+                            text = "Turn off to stop alerts. Lottery invitations and reservations still appear in the app.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                    Switch(
+                        checked = receiveNotifs,
+                        onCheckedChange = { receiveNotifs = it },
+                        modifier = Modifier.testTag("profile_notifications_toggle")
+                    )
                 }
 
                 Button(
@@ -188,6 +200,16 @@ fun ProfileAndRoleScreen(
                         color = if (message == "Profile updated.") MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
                         modifier = Modifier.testTag("profile_save_feedback")
                     )
+                }
+
+                if (profile.role == UserRole.ENTRANT) {
+                    Button(
+                        onClick = onNavigateToReservations,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("My Reservations")
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
 
                 Spacer(Modifier.height(4.dp))

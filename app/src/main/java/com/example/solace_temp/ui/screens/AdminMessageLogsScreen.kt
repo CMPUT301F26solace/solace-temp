@@ -10,6 +10,8 @@ package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -209,82 +211,97 @@ fun AdminMessageLogsScreen(
                 shape = RoundedCornerShape(16.dp)
             )
 
-            // Reservation Status Filter Chips (Split into two rows so CANCELLED, PAST, etc. are on a row below)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "Status Filter:",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilterChip(
-                        selected = selectedStatusFilter == null,
-                        onClick = { selectedStatusFilter = null },
-                        label = { Text("All") },
-                        modifier = Modifier.testTag("filter_status_all")
-                    )
-                    FilterChip(
-                        selected = selectedStatusFilter == ReservationStatus.ACTIVE,
-                        onClick = { selectedStatusFilter = if (selectedStatusFilter == ReservationStatus.ACTIVE) null else ReservationStatus.ACTIVE },
-                        label = { Text("ACTIVE") },
-                        modifier = Modifier.testTag("filter_status_ACTIVE")
-                    )
-                    FilterChip(
-                        selected = selectedStatusFilter == ReservationStatus.INVITED,
-                        onClick = { selectedStatusFilter = if (selectedStatusFilter == ReservationStatus.INVITED) null else ReservationStatus.INVITED },
-                        label = { Text("INVITED") },
-                        modifier = Modifier.testTag("filter_status_INVITED")
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilterChip(
-                        selected = selectedStatusFilter == ReservationStatus.CANCELLED,
-                        onClick = { selectedStatusFilter = if (selectedStatusFilter == ReservationStatus.CANCELLED) null else ReservationStatus.CANCELLED },
-                        label = { Text("CANCELLED") },
-                        modifier = Modifier.testTag("filter_status_CANCELLED")
-                    )
-                    FilterChip(
-                        selected = selectedStatusFilter == ReservationStatus.PAST,
-                        onClick = { selectedStatusFilter = if (selectedStatusFilter == ReservationStatus.PAST) null else ReservationStatus.PAST },
-                        label = { Text("PAST") },
-                        modifier = Modifier.testTag("filter_status_PAST")
-                    )
-                    FilterChip(
-                        selected = selectedStatusFilter == ReservationStatus.REJECTED,
-                        onClick = { selectedStatusFilter = if (selectedStatusFilter == ReservationStatus.REJECTED) null else ReservationStatus.REJECTED },
-                        label = { Text("REJECTED") },
-                        modifier = Modifier.testTag("filter_status_REJECTED")
-                    )
-                }
-            }
+            var statusDropdownExpanded by remember { mutableStateOf(false) }
+            var dateDropdownExpanded by remember { mutableStateOf(false) }
+            var campsiteDropdownExpanded by remember { mutableStateOf(false) }
 
-            // Date Range & Campsite Filter Row
+            // Single-line Dropdown Filters Bar (Leaves majority of screen for actual logs)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Range:",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                DateRangeFilter.entries.forEach { range ->
+                // Status Filter Dropdown
+                Box {
                     FilterChip(
-                        selected = selectedDateRange == range,
-                        onClick = { selectedDateRange = range },
-                        label = { Text(range.label) }
+                        selected = selectedStatusFilter != null,
+                        onClick = { statusDropdownExpanded = true },
+                        label = { Text("Status: ${selectedStatusFilter?.name ?: "All"} ▾") },
+                        modifier = Modifier.testTag("filter_status_dropdown")
                     )
+                    DropdownMenu(
+                        expanded = statusDropdownExpanded,
+                        onDismissRequest = { statusDropdownExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("All Statuses") },
+                            onClick = {
+                                selectedStatusFilter = null
+                                statusDropdownExpanded = false
+                            },
+                            modifier = Modifier.testTag("filter_status_all")
+                        )
+                        ReservationStatus.entries.forEach { statusOption ->
+                            DropdownMenuItem(
+                                text = { Text(statusOption.name) },
+                                onClick = {
+                                    selectedStatusFilter = statusOption
+                                    statusDropdownExpanded = false
+                                },
+                                modifier = Modifier.testTag("filter_status_${statusOption.name}")
+                            )
+                        }
+                    }
+                }
+
+                // Date Range Filter Dropdown
+                Box {
+                    FilterChip(
+                        selected = selectedDateRange != DateRangeFilter.ALL_TIME,
+                        onClick = { dateDropdownExpanded = true },
+                        label = { Text("Range: ${selectedDateRange.label} ▾") },
+                        modifier = Modifier.testTag("filter_date_dropdown")
+                    )
+                    DropdownMenu(
+                        expanded = dateDropdownExpanded,
+                        onDismissRequest = { dateDropdownExpanded = false }
+                    ) {
+                        DateRangeFilter.entries.forEach { range ->
+                            DropdownMenuItem(
+                                text = { Text(range.label) },
+                                onClick = {
+                                    selectedDateRange = range
+                                    dateDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Campsite Filter Dropdown
+                Box {
+                    FilterChip(
+                        selected = selectedCampsiteFilter != "All",
+                        onClick = { campsiteDropdownExpanded = true },
+                        label = { Text("Campsite: $selectedCampsiteFilter ▾") },
+                        modifier = Modifier.testTag("filter_campsite_dropdown")
+                    )
+                    DropdownMenu(
+                        expanded = campsiteDropdownExpanded,
+                        onDismissRequest = { campsiteDropdownExpanded = false }
+                    ) {
+                        availableCampsites.forEach { siteName ->
+                            DropdownMenuItem(
+                                text = { Text(siteName) },
+                                onClick = {
+                                    selectedCampsiteFilter = siteName
+                                    campsiteDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
                 }
             }
 

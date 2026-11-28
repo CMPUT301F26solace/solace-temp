@@ -177,7 +177,8 @@ class AdminMessageLogsTest {
             AdminMessageLogsScreen(repository = repo, onBack = {})
         }
 
-        // Click CANCELLED status filter chip
+        // Open status dropdown then click CANCELLED status filter item
+        composeTestRule.onNodeWithTag("filter_status_dropdown").performClick()
         composeTestRule.onNodeWithTag("filter_status_CANCELLED").performClick()
 
         // Verify CANCELLED message log is shown, ACTIVE log is hidden

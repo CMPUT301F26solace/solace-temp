@@ -171,7 +171,7 @@ class DeviceIdentificationTest {
             ProfileAndRoleScreen(repository = fakeRepo)
         }
 
-        composeTestRule.onNodeWithText("📱 Device ID: device-test-789").assertIsDisplayed()
+        composeTestRule.onNodeWithText("📱 Device ID: device-test-789").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Login").assertDoesNotExist()
         composeTestRule.onNodeWithText("Password").assertDoesNotExist()
     }

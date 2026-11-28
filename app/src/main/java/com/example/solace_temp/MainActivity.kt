@@ -56,6 +56,7 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.example.solace_temp.models.UserRole
 import com.example.solace_temp.util.SystemNotificationHelper
+import com.example.solace_temp.validation.NotificationPreferenceRules
 
 /**
  * Main entry point of the Solace application.
@@ -104,11 +105,7 @@ fun SolaceCampsiteApp() {
     val entrantNotifications = notifications.filter {
         it.recipientId.isBlank() || it.recipientId == profile.deviceId
     }
-    val unseenCount = if (profile.role == UserRole.ENTRANT) {
-        entrantNotifications.count { !it.isSeen }
-    } else {
-        0
-    }
+    val unseenCount = NotificationPreferenceRules.unreadBadgeCount(profile, entrantNotifications)
 
     // Request notification runtime permission on Android 13+ (API 33+)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -123,15 +120,16 @@ fun SolaceCampsiteApp() {
     // Track posted notification IDs to prevent duplicate status-bar alerts
     var postedSystemNotificationIds by remember { mutableStateOf(setOf<String>()) }
     LaunchedEffect(entrantNotifications) {
-        val newlyArrivedWins = entrantNotifications.filter {
-            it.isLotteryWin && it.id !in postedSystemNotificationIds
+        val newlyArrivedWins = NotificationPreferenceRules.systemAlertsToPost(
+            profile,
+            entrantNotifications,
+            postedSystemNotificationIds
+        )
+        newlyArrivedWins.forEach { notif ->
+            SystemNotificationHelper.postLotteryWinNotification(context, notif)
         }
-        if (newlyArrivedWins.isNotEmpty()) {
-            newlyArrivedWins.forEach { notif ->
-                SystemNotificationHelper.postLotteryWinNotification(context, notif)
-            }
-            postedSystemNotificationIds = postedSystemNotificationIds + newlyArrivedWins.map { it.id }
-        }
+        // Skipped notifications are also marked handled so opting back in doesn't post old alerts
+        postedSystemNotificationIds = postedSystemNotificationIds + entrantNotifications.map { it.id }
     }
 
     // Automatically check and trigger expired lottery draws on launch/session start, when lotteries update, and periodically
@@ -257,7 +255,7 @@ fun SolaceCampsiteApp() {
                     CampsiteReservationScreen(
                         campsiteId = campsiteId,
                         notificationId = notificationId,
-                        onReservationConfirmed = { startDate, endDate ->
+                        onReservationConfirmed = { startDate, endDate, onError ->
                             scope.launch {
                                 val success = repository.createReservation(
                                     campsiteId = campsiteId,
@@ -267,6 +265,8 @@ fun SolaceCampsiteApp() {
                                 )
                                 if (success) {
                                     navController.popBackStack()
+                                } else {
+                                    onError("Could not confirm booking. One or more selected dates may already be booked.")
                                 }
                             }
                         },
@@ -278,7 +278,8 @@ fun SolaceCampsiteApp() {
 
                 composable(AppScreen.EntrantReservations.route) {
                     EntrantReservationsScreen(
-                        repository = repository
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
                     )
                 }
 
@@ -361,7 +362,7 @@ fun SolaceCampsiteApp() {
                     )
                 }
                 composable(BottomNavItem.AdminLogs.route) {
-                    AdminMessageLogsScreen(
+                    AdminLogsTabScreen(
                         repository = repository,
                         onBack = { navController.popBackStack() }
                     )
@@ -371,7 +372,8 @@ fun SolaceCampsiteApp() {
                 composable(BottomNavItem.ProfileTab.route) {
                     ProfileAndRoleScreen(
                         repository = repository,
-                        onNavigateToPolicy = { navController.navigate("policy_and_guidelines") }
+                        onNavigateToPolicy = { navController.navigate("policy_and_guidelines") },
+                        onNavigateToReservations = { navController.navigate(AppScreen.EntrantReservations.route) }
                     )
                 }
                 composable("policy_and_guidelines") {

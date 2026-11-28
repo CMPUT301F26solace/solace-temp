@@ -13,11 +13,15 @@ import android.net.Uri
 import com.example.solace_temp.models.*
 import com.example.solace_temp.validation.WaitingListException
 import com.example.solace_temp.validation.WaitingListRules
+import com.example.solace_temp.validation.WaitlistNotificationRules
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Interface defining the primary data access and domain operations for the application.
@@ -56,6 +60,14 @@ interface AppRepository {
     /** Administrative audit log recording access to communication logs. */
     val adminAuditLogs: StateFlow<List<AdminAuditAccessLog>>
         get() = MutableStateFlow(emptyList())
+
+    /** System-wide notification logs for administrative review. */
+    val systemNotificationLogs: StateFlow<List<SystemNotificationLog>>
+        get() = MutableStateFlow(emptyList())
+
+    /** Error state flow for notification logs retrieval. */
+    val notificationLogsError: StateFlow<String?>
+        get() = MutableStateFlow(null)
 
     /** Logs an administrator reviewing a conversation thread. */
     fun logAdminAuditAccess(
@@ -137,6 +149,46 @@ interface AppRepository {
         onResult: (Result<String>) -> Unit
     ) {
         onResult(Result.success(imageUri.toString()))
+    }
+
+    /**
+     * Cancels an active campsite reservation for the current entrant and records a cancellation
+     * confirmation notification containing the campsite name, cancelled dates, and confirmation ID.
+     *
+     * @param reservationId The unique confirmation ID of the reservation to cancel.
+     * @param onResult Callback receiving a [CancellationOutcome] on success, or an error if cancellation fails.
+     */
+    fun cancelReservation(
+        reservationId: String,
+        onResult: (Result<CancellationOutcome>) -> Unit
+    ) {
+        onResult(
+            Result.failure(
+                UnsupportedOperationException("Reservation cancellation is not supported by this repository.")
+            )
+        )
+    }
+
+    /**
+     * Sends an owner-written notification to the entrants on a lottery's waitlist and saves a
+     * record of the broadcast. Entrants who opted out of notifications are skipped.
+     *
+     * @param lotteryId The lottery whose waitlist is notified.
+     * @param title The notification title.
+     * @param message The notification message.
+     * @param onResult Receives the saved [BroadcastNotification], or an error if sending fails.
+     */
+    fun sendWaitlistNotification(
+        lotteryId: String,
+        title: String,
+        message: String,
+        onResult: (Result<BroadcastNotification>) -> Unit
+    ) {
+        onResult(
+            Result.failure(
+                UnsupportedOperationException("Waitlist notifications are not supported by this repository.")
+            )
+        )
     }
 
     /**
@@ -563,6 +615,80 @@ object MockAppRepository : AppRepository {
 
     override val ownerEntrantMessages: StateFlow<List<OwnerEntrantMessage>> = _ownerEntrantMessages.asStateFlow()
 
+    private val _systemNotificationLogs = MutableStateFlow(
+        listOf(
+            SystemNotificationLog(
+                id = "notif-log-101",
+                senderId = "owner-8F92",
+                senderName = "John Campground Owner",
+                senderRole = UserRole.CAMPSITE_OWNER,
+                recipientIds = listOf("user-101", "user-102", "user-103", "user-104"),
+                targetAudienceGroup = "Waitlist Entrants",
+                campsiteId = "camp-banff-01",
+                campsiteName = "Tunnel Mountain Village I",
+                title = "Tunnel Mountain Draw Results Released",
+                messageBody = "Congratulations to all selected winners! Please check your invitation to confirm booking before the 48-hour deadline.",
+                type = NotificationType.LOTTERY_DRAW,
+                deliveryStatus = NotificationDeliveryStatus.SENT,
+                channel = NotificationChannel.BOTH,
+                timestampMillis = System.currentTimeMillis() - 3600000L * 3
+            ),
+            SystemNotificationLog(
+                id = "notif-log-102",
+                senderId = "owner-9999",
+                senderName = "Sarah Connor",
+                senderRole = UserRole.CAMPSITE_OWNER,
+                recipientIds = listOf("user-201", "user-202"),
+                targetAudienceGroup = "Registered Entrants",
+                campsiteId = "camp-hinton-02",
+                campsiteName = "Hinton-Grande Cache Pines",
+                title = "Weather Advisory & Cookhouse Maintenance",
+                messageBody = "Important update: The outdoor cookhouse will be under maintenance this Friday morning.",
+                type = NotificationType.OWNER_BROADCAST,
+                deliveryStatus = NotificationDeliveryStatus.SENT,
+                channel = NotificationChannel.IN_APP,
+                timestampMillis = System.currentTimeMillis() - 86400000L * 2
+            ),
+            SystemNotificationLog(
+                id = "notif-log-103",
+                senderId = "admin-sys-01",
+                senderName = "Solace Platform Admin",
+                senderRole = UserRole.ADMIN,
+                recipientIds = listOf("ALL_USERS"),
+                targetAudienceGroup = "All Platform Users",
+                campsiteId = "",
+                campsiteName = "",
+                title = "System Maintenance & Terms Update",
+                messageBody = "Solace platform scheduled maintenance will occur on Sunday between 2:00 AM and 4:00 AM MST.",
+                type = NotificationType.SYSTEM_UPDATE,
+                deliveryStatus = NotificationDeliveryStatus.SENT,
+                channel = NotificationChannel.PUSH_NOTIFICATION,
+                timestampMillis = System.currentTimeMillis() - 86400000L * 4
+            ),
+            SystemNotificationLog(
+                id = "notif-log-104",
+                senderId = "owner-8F92",
+                senderName = "John Campground Owner",
+                senderRole = UserRole.CAMPSITE_OWNER,
+                recipientIds = listOf("user-305"),
+                targetAudienceGroup = "Individual User",
+                campsiteId = "camp-banff-01",
+                campsiteName = "Tunnel Mountain Village I",
+                title = "Reservation Cancellation Notice",
+                messageBody = "Your reservation #res-banff-1001 status changed to CANCELLED.",
+                type = NotificationType.RESERVATION_ALERT,
+                deliveryStatus = NotificationDeliveryStatus.FAILED,
+                channel = NotificationChannel.PUSH_NOTIFICATION,
+                timestampMillis = System.currentTimeMillis() - 86400000L * 6
+            )
+        )
+    )
+
+    override val systemNotificationLogs: StateFlow<List<SystemNotificationLog>> = _systemNotificationLogs.asStateFlow()
+
+    private val _notificationLogsError = MutableStateFlow<String?>(null)
+    override val notificationLogsError: StateFlow<String?> = _notificationLogsError.asStateFlow()
+
     private val _adminAuditLogs = MutableStateFlow<List<AdminAuditAccessLog>>(emptyList())
     override val adminAuditLogs: StateFlow<List<AdminAuditAccessLog>> = _adminAuditLogs.asStateFlow()
 
@@ -682,6 +808,137 @@ object MockAppRepository : AppRepository {
                 }
             }
         }
+    }
+
+    /**
+     * Simulates cancelling an active reservation in memory and appending a cancellation
+     * confirmation notification to the entrant's in-app notification history.
+     */
+    override fun cancelReservation(
+        reservationId: String,
+        onResult: (Result<CancellationOutcome>) -> Unit
+    ) {
+        val currentUserId = _currentProfile.value.deviceId
+        val target = _reservations.value.find { it.id == reservationId }
+
+        // Validate that the reservation exists, belongs to this entrant, and is still active
+        when {
+            target == null -> {
+                onResult(Result.failure(NoSuchElementException("Reservation not found.")))
+                return
+            }
+            target.entrantId != currentUserId -> {
+                onResult(Result.failure(SecurityException("You can only cancel your own reservations.")))
+                return
+            }
+            target.status != ReservationStatus.ACTIVE -> {
+                onResult(Result.failure(IllegalStateException("This reservation is already ${target.status.name.lowercase()}.")))
+                return
+            }
+            !target.isUpcomingAndCancellable() -> {
+                onResult(Result.failure(IllegalStateException("Only upcoming active reservations can be cancelled.")))
+                return
+            }
+        }
+
+        val cancelledAt = System.currentTimeMillis()
+        val cancelledReservation = target.copy(
+            status = ReservationStatus.CANCELLED,
+            cancelledAtMillis = cancelledAt
+        )
+
+        // Update in-memory reservation state to CANCELLED
+        _reservations.update { list ->
+            list.map { if (it.id == reservationId) cancelledReservation else it }
+        }
+
+        // Format dates and timestamp for the in-app cancellation confirmation notification
+        val dateSummary = when {
+            cancelledReservation.bookedDates.isEmpty() -> "Dates not specified"
+            cancelledReservation.bookedDates.size == 1 -> cancelledReservation.bookedDates.first()
+            else -> "${cancelledReservation.bookedDates.first()} to ${cancelledReservation.bookedDates.last()}"
+        }
+        val formattedTime = SimpleDateFormat("MMM dd, yyyy · h:mm a", Locale.getDefault())
+            .format(Date(cancelledAt))
+        val siteName = cancelledReservation.campsiteName.ifBlank { "Campsite Reservation" }
+
+        // Record the cancellation confirmation in the entrant's notification log
+        val confirmationNotification = AppNotification(
+            id = "notif-cancel-${cancelledReservation.id}",
+            recipientId = currentUserId,
+            senderId = cancelledReservation.ownerId.ifBlank { "system" },
+            campsiteId = cancelledReservation.campsiteId,
+            title = "Reservation Cancelled",
+            message = "Your booking at $siteName ($dateSummary) has been cancelled. Confirmation ID: ${cancelledReservation.id}.",
+            timestamp = formattedTime,
+            isLotteryWin = false,
+            isSeen = false
+        )
+        _notifications.update { list ->
+            // Prepend so the newest cancellation confirmation appears at the top of the log
+            listOf(confirmationNotification) + list.filterNot { it.id == confirmationNotification.id }
+        }
+
+        onResult(
+            Result.success(
+                CancellationOutcome(
+                    cancelledReservation = cancelledReservation,
+                    notificationDelivered = true
+                )
+            )
+        )
+    }
+
+    /** Adds an owner's waitlist notification to the in-memory notification list. */
+    override fun sendWaitlistNotification(
+        lotteryId: String,
+        title: String,
+        message: String,
+        onResult: (Result<BroadcastNotification>) -> Unit
+    ) {
+        val lottery = _lotteries.value.find { it.id == lotteryId }
+        if (lottery == null) {
+            onResult(Result.failure(NoSuchElementException("This lottery could not be found.")))
+            return
+        }
+        val senderId = _currentProfile.value.deviceId
+        val recipients = WaitlistNotificationRules.recipients(lottery, _profiles.value)
+        WaitlistNotificationRules.sendError(lottery, senderId, title, message, recipients)?.let { error ->
+            onResult(Result.failure(IllegalArgumentException(error)))
+            return
+        }
+
+        val sentAt = System.currentTimeMillis()
+        val campsiteId = lottery.campsiteIds.firstOrNull().orEmpty()
+        val broadcast = BroadcastNotification(
+            id = "broadcast-${UUID.randomUUID().toString().take(8)}",
+            ownerId = senderId,
+            lotteryId = lottery.id,
+            lotteryName = lottery.name,
+            campsiteId = campsiteId,
+            campsiteName = _campsites.value.find { it.id == campsiteId }?.name.orEmpty(),
+            title = title.trim(),
+            message = message.trim(),
+            recipientIds = recipients,
+            recipientCount = recipients.size,
+            sentAtMillis = sentAt
+        )
+        val formattedTime = SimpleDateFormat("MMM dd, yyyy · h:mm a", Locale.getDefault())
+            .format(Date(sentAt))
+        val newNotifications = recipients.map { entrantId ->
+            AppNotification(
+                id = "notif-${broadcast.id}-$entrantId",
+                recipientId = entrantId,
+                senderId = senderId,
+                campsiteId = campsiteId,
+                title = broadcast.title,
+                message = broadcast.message,
+                timestamp = formattedTime,
+                broadcastId = broadcast.id
+            )
+        }
+        _notifications.update { list -> newNotifications + list }
+        onResult(Result.success(broadcast))
     }
 
     /** Stores a confirmed booking in memory for UI tests and previews. */
