@@ -58,7 +58,7 @@ class FirestoreAppRepository(context: Context) : AppRepository {
             email = "",
             phone = "",
             role = UserRole.ENTRANT,
-            isAdmin = true
+            isAdmin = false
         )
     )
     
@@ -98,52 +98,7 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     /** Exposes the list of notifications flow. */
     override val notifications: StateFlow<List<AppNotification>> = _notifications.asStateFlow()
 
-    private val _ownerEntrantMessages = MutableStateFlow(
-        listOf(
-            OwnerEntrantMessage(
-                id = "msg-101",
-                ownerId = "owner-8F92",
-                ownerName = "John Campground Owner",
-                entrantId = "entrant-123",
-                entrantName = "Alex Morgan",
-                campsiteId = "camp-banff-01",
-                campsiteName = "Tunnel Mountain Village I",
-                reservationId = "res-banff-1001",
-                reservationStatus = ReservationStatus.ACTIVE,
-                messageText = "Hi Alex, your campsite booking for Tunnel Mountain is confirmed. Please let us know if you need bear locker instructions.",
-                timestampMillis = System.currentTimeMillis() - 86400000L * 2,
-                status = MessageDeliveryStatus.READ
-            ),
-            OwnerEntrantMessage(
-                id = "msg-102",
-                ownerId = "owner-8F92",
-                ownerName = "John Campground Owner",
-                entrantId = "entrant-123",
-                entrantName = "Alex Morgan",
-                campsiteId = "camp-banff-01",
-                campsiteName = "Tunnel Mountain Village I",
-                reservationId = "res-banff-1001",
-                reservationStatus = ReservationStatus.ACTIVE,
-                messageText = "Thanks John! What time is check-in on the first day?",
-                timestampMillis = System.currentTimeMillis() - 86400000L * 2 + 3600000L,
-                status = MessageDeliveryStatus.READ
-            ),
-            OwnerEntrantMessage(
-                id = "msg-201",
-                ownerId = "owner-9999",
-                ownerName = "Sarah Connor",
-                entrantId = "entrant-456",
-                entrantName = "David Miller",
-                campsiteId = "camp-hinton-02",
-                campsiteName = "Hinton-Grande Cache Pines",
-                reservationId = "res-hinton-2002",
-                reservationStatus = ReservationStatus.CANCELLED,
-                messageText = "Notice: Your reservation #res-hinton-2002 was cancelled per your request.",
-                timestampMillis = System.currentTimeMillis() - 86400000L * 5,
-                status = MessageDeliveryStatus.DELIVERED
-            )
-        )
-    )
+    private val _ownerEntrantMessages = MutableStateFlow<List<OwnerEntrantMessage>>(emptyList())
 
     override val ownerEntrantMessages: StateFlow<List<OwnerEntrantMessage>> = _ownerEntrantMessages.asStateFlow()
 
@@ -250,6 +205,7 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         listenToLotteries()
         listenToReservations()
         listenToNotifications()
+        listenToOwnerEntrantMessages()
     }
 
     /** Sets up a Firestore listener for the current user's profile document. */
@@ -291,12 +247,7 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     private fun listenToCampsites() {
         db.collection("campsites").addSnapshotListener { snapshot, error ->
             if (error != null || snapshot == null) return@addSnapshotListener
-            val list = snapshot.toObjects(Campsite::class.java)
-            if (list.isEmpty()) {
-                seedInitialDataIfNeeded()
-            } else {
-                _campsites.value = list
-            }
+            _campsites.value = snapshot.toObjects(Campsite::class.java)
         }
     }
 
@@ -366,6 +317,15 @@ class FirestoreAppRepository(context: Context) : AppRepository {
             .addSnapshotListener { snapshot, error ->
                 if (error != null || snapshot == null) return@addSnapshotListener
                 _notifications.value = snapshot.toObjects(AppNotification::class.java)
+            }
+    }
+
+    /** Sets up a Firestore listener for the ownerEntrantMessages collection. */
+    private fun listenToOwnerEntrantMessages() {
+        db.collection("ownerEntrantMessages")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) return@addSnapshotListener
+                _ownerEntrantMessages.value = snapshot.toObjects(OwnerEntrantMessage::class.java)
             }
     }
 
@@ -590,7 +550,12 @@ class FirestoreAppRepository(context: Context) : AppRepository {
     /** Removes the given entrant from the waiting list of a specific lottery in Firestore. */
     override fun leaveWaitingList(lotteryId: String, entrantId: String) {
         db.collection("lotteries").document(lotteryId)
-            .update("waitingListEntrantIds", FieldValue.arrayRemove(entrantId))
+            .update(
+                mapOf(
+                    "waitingListEntrantIds" to FieldValue.arrayRemove(entrantId),
+                    "waitlistJoinedAtMillis.$entrantId" to FieldValue.delete()
+                )
+            )
     }
     /** Atomically checks dates, duplicates and capacity before joining (US 01.02.01). */
     override fun joinWaitingListWithResult(
@@ -763,48 +728,79 @@ class FirestoreAppRepository(context: Context) : AppRepository {
 
     /** Performs a random draw for the specified lottery and updates Firestore with winners. */
     override fun drawLotteryWinners(lotteryId: String) {
-        val lottery = _lotteries.value.find { it.id == lotteryId } ?: return
-        if (lottery.isDrawn && lottery.invitedWinnerIds.isNotEmpty()) {
-            return
-        }
-        val count = minOf(lottery.waitingListEntrantIds.size, lottery.maxWinners)
-        val winners = lottery.waitingListEntrantIds.shuffled().take(count)
+        if (lotteryId.isBlank()) return
+        val document = db.collection("lotteries").document(lotteryId)
+        db.runTransaction { tx ->
+            val lottery = tx.get(document).toObject(Lottery::class.java)
+                ?: return@runTransaction null
+            if (lottery.isDrawn) {
+                return@runTransaction null
+            }
+            val count = minOf(lottery.waitingListEntrantIds.size, lottery.maxWinners)
+            val winners = lottery.waitingListEntrantIds.shuffled().take(count)
 
-        _lotteries.update { list ->
-            list.map { if (it.id == lotteryId) it.copy(invitedWinnerIds = winners, isDrawn = true) else it }
-        }
-
-        db.collection("lotteries").document(lotteryId).update(
-            mapOf(
-                "invitedWinnerIds" to winners,
-                "isDrawn" to true
+            tx.update(
+                document,
+                mapOf(
+                    "invitedWinnerIds" to winners,
+                    "isDrawn" to true
+                )
             )
-        )
-
-        sendWinnerNotifications(lottery, winners)
+            lottery to winners
+        }.addOnSuccessListener { result ->
+            if (result != null) {
+                val (lottery, winners) = result
+                _lotteries.update { list ->
+                    list.map {
+                        if (it.id == lotteryId) it.copy(invitedWinnerIds = winners, isDrawn = true) else it
+                    }
+                }
+                sendWinnerNotifications(lottery, winners)
+            }
+        }.addOnFailureListener { error ->
+            Log.e("FirestoreRepo", "Lottery draw failed", error)
+        }
     }
 
     /** Redraws or picks backup winners from remaining waitlist in Firestore. */
     override fun redrawLottery(lotteryId: String) {
-        val lottery = _lotteries.value.find { it.id == lotteryId } ?: return
-        val remaining = lottery.waitingListEntrantIds.filter { id -> id !in lottery.invitedWinnerIds }
-        val needed = lottery.maxWinners - lottery.invitedWinnerIds.size
-        if (needed <= 0) return
-        val newWinners = remaining.shuffled().take(needed)
-        val updatedWinners = lottery.invitedWinnerIds + newWinners
+        if (lotteryId.isBlank()) return
+        val document = db.collection("lotteries").document(lotteryId)
+        db.runTransaction { tx ->
+            val lottery = tx.get(document).toObject(Lottery::class.java)
+                ?: return@runTransaction null
+            if (!lottery.isDrawn) {
+                return@runTransaction null
+            }
+            val remaining = lottery.waitingListEntrantIds.filter { id -> id !in lottery.invitedWinnerIds }
+            val needed = lottery.maxWinners - lottery.invitedWinnerIds.size
+            if (needed <= 0 || remaining.isEmpty()) {
+                return@runTransaction null
+            }
+            val newWinners = remaining.shuffled().take(needed)
+            val updatedWinners = lottery.invitedWinnerIds + newWinners
 
-        _lotteries.update { list ->
-            list.map { if (it.id == lotteryId) it.copy(invitedWinnerIds = updatedWinners, isDrawn = true) else it }
-        }
-
-        db.collection("lotteries").document(lotteryId).update(
-            mapOf(
-                "invitedWinnerIds" to updatedWinners,
-                "isDrawn" to true
+            tx.update(
+                document,
+                mapOf(
+                    "invitedWinnerIds" to updatedWinners,
+                    "isDrawn" to true
+                )
             )
-        )
-
-        sendWinnerNotifications(lottery, newWinners)
+            Triple(lottery, updatedWinners, newWinners)
+        }.addOnSuccessListener { result ->
+            if (result != null) {
+                val (lottery, updatedWinners, newWinners) = result
+                _lotteries.update { list ->
+                    list.map {
+                        if (it.id == lotteryId) it.copy(invitedWinnerIds = updatedWinners, isDrawn = true) else it
+                    }
+                }
+                sendWinnerNotifications(lottery, newWinners)
+            }
+        }.addOnFailureListener { error ->
+            Log.e("FirestoreRepo", "Lottery redraw failed", error)
+        }
     }
 
     override fun triggerExpiredLotteryDraws() {
@@ -1159,16 +1155,6 @@ class FirestoreAppRepository(context: Context) : AppRepository {
         }
         targetIds.forEach { id ->
             db.collection("notifications").document(id).update("isSeen", true)
-        }
-    }
-
-    /** Seeds initial dummy data into Firestore if collections are empty. */
-    private fun seedInitialDataIfNeeded() {
-        MockAppRepository.campsites.value.forEach { sampleSite ->
-            db.collection("campsites").document(sampleSite.id).set(sampleSite)
-        }
-        MockAppRepository.lotteries.value.forEach { sampleLottery ->
-            db.collection("lotteries").document(sampleLottery.id).set(sampleLottery)
         }
     }
 }

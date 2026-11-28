@@ -93,6 +93,11 @@ object QrCodeGeneratorUtil {
     }
 }
 
+private val dateFormatter = object : ThreadLocal<SimpleDateFormat>() {
+    override fun initialValue(): SimpleDateFormat =
+        SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+}
+
 /**
  * Formats a given timestamp in milliseconds into a readable date string.
  * @param millis The timestamp in milliseconds.
@@ -100,7 +105,7 @@ object QrCodeGeneratorUtil {
  */
 fun formatDateMillis(millis: Long?): String {
     if (millis == null) return "Not Set"
-    return SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(millis))
+    return dateFormatter.get()?.format(Date(millis)) ?: "Not Set"
 }
 
 /**
