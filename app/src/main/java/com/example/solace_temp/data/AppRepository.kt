@@ -13,6 +13,7 @@ import android.net.Uri
 import com.example.solace_temp.models.*
 import com.example.solace_temp.validation.WaitingListException
 import com.example.solace_temp.validation.WaitingListRules
+import com.example.solace_temp.validation.WaitlistNotificationRules
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -156,6 +157,28 @@ interface AppRepository {
         onResult(
             Result.failure(
                 UnsupportedOperationException("Reservation cancellation is not supported by this repository.")
+            )
+        )
+    }
+
+    /**
+     * Sends an owner-written notification to the entrants on a lottery's waitlist and saves a
+     * record of the broadcast. Entrants who opted out of notifications are skipped.
+     *
+     * @param lotteryId The lottery whose waitlist is notified.
+     * @param title The notification title.
+     * @param message The notification message.
+     * @param onResult Receives the saved [BroadcastNotification], or an error if sending fails.
+     */
+    fun sendWaitlistNotification(
+        lotteryId: String,
+        title: String,
+        message: String,
+        onResult: (Result<BroadcastNotification>) -> Unit
+    ) {
+        onResult(
+            Result.failure(
+                UnsupportedOperationException("Waitlist notifications are not supported by this repository.")
             )
         )
     }
@@ -782,6 +805,58 @@ object MockAppRepository : AppRepository {
                 )
             )
         )
+    }
+
+    /** Adds an owner's waitlist notification to the in-memory notification list. */
+    override fun sendWaitlistNotification(
+        lotteryId: String,
+        title: String,
+        message: String,
+        onResult: (Result<BroadcastNotification>) -> Unit
+    ) {
+        val lottery = _lotteries.value.find { it.id == lotteryId }
+        if (lottery == null) {
+            onResult(Result.failure(NoSuchElementException("This lottery could not be found.")))
+            return
+        }
+        val senderId = _currentProfile.value.deviceId
+        val recipients = WaitlistNotificationRules.recipients(lottery, _profiles.value)
+        WaitlistNotificationRules.sendError(lottery, senderId, title, message, recipients)?.let { error ->
+            onResult(Result.failure(IllegalArgumentException(error)))
+            return
+        }
+
+        val sentAt = System.currentTimeMillis()
+        val campsiteId = lottery.campsiteIds.firstOrNull().orEmpty()
+        val broadcast = BroadcastNotification(
+            id = "broadcast-${UUID.randomUUID().toString().take(8)}",
+            ownerId = senderId,
+            lotteryId = lottery.id,
+            lotteryName = lottery.name,
+            campsiteId = campsiteId,
+            campsiteName = _campsites.value.find { it.id == campsiteId }?.name.orEmpty(),
+            title = title.trim(),
+            message = message.trim(),
+            recipientIds = recipients,
+            recipientCount = recipients.size,
+            sentAtMillis = sentAt
+        )
+        val formattedTime = SimpleDateFormat("MMM dd, yyyy · h:mm a", Locale.getDefault())
+            .format(Date(sentAt))
+        val newNotifications = recipients.map { entrantId ->
+            AppNotification(
+                id = "notif-${broadcast.id}-$entrantId",
+                recipientId = entrantId,
+                senderId = senderId,
+                campsiteId = campsiteId,
+                title = broadcast.title,
+                message = broadcast.message,
+                timestamp = formattedTime,
+                broadcastId = broadcast.id
+            )
+        }
+        _notifications.update { list -> newNotifications + list }
+        onResult(Result.success(broadcast))
     }
 
     /** Stores a confirmed booking in memory for UI tests and previews. */
