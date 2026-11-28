@@ -50,6 +50,7 @@ import com.example.solace_temp.data.FirestoreAppRepository
 import com.example.solace_temp.ui.navigation.BottomNavItem
 import com.example.solace_temp.ui.navigation.getBottomNavItemsForRole
 import com.example.solace_temp.ui.screens.*
+import com.example.solace_temp.ui.screens.AdminProfileDetailsScreen
 import com.example.solace_temp.ui.theme.Solace_tempTheme
 import kotlinx.coroutines.delay
 import com.example.solace_temp.ui.screens.EntrantNotificationsScreen
@@ -415,9 +416,10 @@ fun SolaceCampsiteApp() {
                 }
                 composable("profile_details/{deviceId}") { backStackEntry ->
                     val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
-                    TeammatePlaceholderScreen(
-                        title = "Profile Moderation (ID: $deviceId)",
-                        userStoriesCovered = "US 03.02.01, US 03.05.01"
+                    AdminProfileDetailsScreen(
+                        deviceId = deviceId,
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 composable(BottomNavItem.AdminLogs.route) {

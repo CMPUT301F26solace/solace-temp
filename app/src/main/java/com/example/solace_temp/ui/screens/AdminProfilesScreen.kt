@@ -26,7 +26,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,10 +51,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.solace_temp.data.AppRepository
 import com.example.solace_temp.models.AccountStatus
+import com.example.solace_temp.models.Profile
 import com.example.solace_temp.models.UserRole
 
 /**
@@ -75,6 +81,11 @@ fun AdminProfilesScreen(
     var showDateFilterDialog by remember { mutableStateOf(false) }
     var dateFilterStart by remember { mutableStateOf<Long?>(null) }
     var dateFilterEnd by remember { mutableStateOf<Long?>(null) }
+
+    var profileToDelete by remember { mutableStateOf<Profile?>(null) }
+    var removalReason by remember { mutableStateOf("") }
+    var removalFeedback by remember { mutableStateOf<String?>(null) }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     // Acceptance Criteria: Only users with verified administrator credentials can access
     if (!currentProfile.isAdmin || currentProfile.role != UserRole.ADMIN) {
@@ -106,6 +117,24 @@ fun AdminProfilesScreen(
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFFEDE8F8)).padding(16.dp)) {
         Text("Admin: User Directory", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
+
+        // Visual Removal Confirmation Feedback Banner
+        removalFeedback?.let { feedback ->
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                modifier = Modifier.fillMaxWidth().testTag("profile_removal_feedback")
+            ) {
+                Text(
+                    text = feedback,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
 
         // Search by name, email, or user identifier
         OutlinedTextField(
@@ -192,7 +221,7 @@ fun AdminProfilesScreen(
                     // Navigation on click
                     modifier = Modifier.fillMaxWidth().clickable { onSelectProfile(user.deviceId) }
                 ) {
-                    Column(Modifier.padding(16.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         // Key identity details
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(user.name.ifBlank { "Unknown User" }, fontWeight = FontWeight.Bold)
@@ -207,12 +236,174 @@ fun AdminProfilesScreen(
                         Text("ID: ${user.deviceId}")
                         if (user.email.isNotBlank()) Text("Email: ${user.email}")
                         Text("Role: ${user.role.name} · Registered: ${formatDateMillis(user.registrationDateMillis)}")
-                        Spacer(Modifier.height(4.dp))
-                        Text("Tap for detailed account overview →", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Tap for detailed account overview →",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            
+                            // Administrative Profile / Owner Removal Button
+                            TextButton(
+                                onClick = {
+                                    removalReason = ""
+                                    validationError = null
+                                    profileToDelete = user
+                                },
+                                modifier = Modifier.testTag("remove_profile_${user.deviceId}")
+                            ) {
+                                Text(
+                                    if (user.role == UserRole.CAMPSITE_OWNER) "Remove Owner" else "Remove Profile",
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    // Modal Confirmation Dialog Requiring Explicit Confirmation Before Deletion Proceeds
+    profileToDelete?.let { user ->
+        val isOwnerAccount = user.role == UserRole.CAMPSITE_OWNER
+
+        AlertDialog(
+            onDismissRequest = {
+                profileToDelete = null
+                validationError = null
+            },
+            title = {
+                Text(
+                    if (isOwnerAccount) "Remove Owner & Enforce Policy" else "Confirm Profile Removal",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = if (isOwnerAccount)
+                            "You are initiating the removal and ban of campsite owner '${user.name.ifBlank { user.deviceId }}' (ID: ${user.deviceId}) for policy violation."
+                        else
+                            "Are you sure you want to permanently remove user profile '${user.name.ifBlank { user.deviceId }}' (ID: ${user.deviceId})?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "System cleanup will execute the following actions:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (isOwnerAccount) {
+                        Text("• All campsites owned by this account will be delisted from search.", style = MaterialTheme.typography.bodySmall)
+                        Text("• Ongoing and upcoming lotteries will be cancelled/flagged.", style = MaterialTheme.typography.bodySmall)
+                        Text("• Active reservations will be cancelled & affected entrants notified.", style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        Text("• Active reservations & invitations will be cancelled.", style = MaterialTheme.typography.bodySmall)
+                        Text("• Entrant lottery waitlist entries will be purged.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("• Profile media assets (avatar images) will be unlinked.", style = MaterialTheme.typography.bodySmall)
+                    Text("• Account credentials will be revoked preventing future logins.", style = MaterialTheme.typography.bodySmall)
+                    Text("• Administrative action will be recorded in audit logs.", style = MaterialTheme.typography.bodySmall)
+
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = removalReason,
+                        onValueChange = {
+                            removalReason = it
+                            validationError = null
+                        },
+                        label = { Text(if (isOwnerAccount) "Stated Policy Violation Reason (Required)" else "Reason for removal (optional)") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("removal_reason_input"),
+                        singleLine = true
+                    )
+
+                    validationError?.let { err ->
+                        Text(
+                            text = err,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.testTag("owner_violation_error")
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val targetId = user.deviceId
+                        val targetName = user.name.ifBlank { user.deviceId }
+
+                        if (isOwnerAccount && removalReason.isBlank()) {
+                            validationError = "A policy violation reason is required to remove an owner account."
+                            return@Button
+                        }
+
+                        profileToDelete = null
+                        validationError = null
+
+                        if (isOwnerAccount) {
+                            repository.removeOwnerForPolicyViolation(
+                                adminId = currentProfile.deviceId,
+                                adminName = currentProfile.name,
+                                targetOwnerId = targetId,
+                                policyViolationReason = removalReason
+                            ) { result ->
+                                result.fold(
+                                    onSuccess = { notifiedCount ->
+                                        removalFeedback = "Campsite owner '$targetName' (ID: $targetId) was successfully removed for policy violation. $notifiedCount affected entrant(s) notified."
+                                    },
+                                    onFailure = { err ->
+                                        removalFeedback = "Error removing owner: ${err.localizedMessage}"
+                                    }
+                                )
+                            }
+                        } else {
+                            repository.removeProfileAsAdmin(
+                                adminId = currentProfile.deviceId,
+                                adminName = currentProfile.name,
+                                targetUserId = targetId,
+                                reason = removalReason
+                            ) { result ->
+                                result.fold(
+                                    onSuccess = {
+                                        removalFeedback = "Profile '$targetName' (ID: $targetId) was successfully removed."
+                                    },
+                                    onFailure = { err ->
+                                        removalFeedback = "Error removing profile: ${err.localizedMessage}"
+                                    }
+                                )
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("confirm_remove_profile")
+                ) {
+                    Text(if (isOwnerAccount) "Enforce Ban & Notify Entrants" else "Remove Profile")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    profileToDelete = null
+                    validationError = null
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Date Range Picker Dialog for filtering by creation date

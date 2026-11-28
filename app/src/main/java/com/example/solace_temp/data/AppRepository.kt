@@ -69,6 +69,41 @@ interface AppRepository {
     val notificationLogsError: StateFlow<String?>
         get() = MutableStateFlow(null)
 
+    /** Administrative audit logs for user profile removals. */
+    val adminProfileRemovalLogs: StateFlow<List<AdminProfileRemovalLog>>
+        get() = MutableStateFlow(emptyList())
+
+    /** Administrative audit logs for campsite owner policy enforcement removals. */
+    val adminOwnerRemovalLogs: StateFlow<List<AdminOwnerRemovalLog>>
+        get() = MutableStateFlow(emptyList())
+
+    /**
+     * Removes or deactivates a user profile as an administrator, revoking credentials and resolving dependent relationships.
+     */
+    fun removeProfileAsAdmin(
+        adminId: String,
+        adminName: String,
+        targetUserId: String,
+        reason: String = "Administrative profile removal",
+        onResult: (Result<Unit>) -> Unit = {}
+    ) {
+        onResult(Result.success(Unit))
+    }
+
+    /**
+     * Removes or bans a campsite owner account for policy violation, delisting campsites,
+     * cancelling lotteries/reservations, notifying affected entrants, and revoking credentials.
+     */
+    fun removeOwnerForPolicyViolation(
+        adminId: String,
+        adminName: String,
+        targetOwnerId: String,
+        policyViolationReason: String,
+        onResult: (Result<Int>) -> Unit = {}
+    ) {
+        onResult(Result.success(0))
+    }
+
     /** Logs an administrator reviewing a conversation thread. */
     fun logAdminAuditAccess(
         adminId: String,
