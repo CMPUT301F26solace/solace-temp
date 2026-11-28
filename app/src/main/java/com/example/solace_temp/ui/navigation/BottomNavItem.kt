@@ -127,7 +127,7 @@ sealed class BottomNavItem(val route: String, val label: String, val icon: Image
  * @param isAdmin Indicates whether the current user has verified admin privileges.
  * @return A list of valid [BottomNavItem]s for the provided role and privilege status.
  */
-fun getBottomNavItemsForRole(role: UserRole, isAdmin: Boolean = true): List<BottomNavItem> {
+fun getBottomNavItemsForRole(role: UserRole, isAdmin: Boolean = false): List<BottomNavItem> {
     if (!isAdmin) {
         return when (role) {
             UserRole.CAMPSITE_OWNER -> listOf(

@@ -53,7 +53,7 @@ class FirestoreAppRepository(context: Context) : AppRepository {
             email = "",
             phone = "",
             role = UserRole.ENTRANT,
-            isAdmin = true
+            isAdmin = false
         )
     )
     

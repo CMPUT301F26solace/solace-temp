@@ -63,7 +63,7 @@ data class Profile(
     val receiveNotifications: Boolean = true,
     val role: UserRole = UserRole.ENTRANT,
     @get:PropertyName("isAdmin") @field:PropertyName("isAdmin")
-    val isAdmin: Boolean = true, // True by default in dev so TAs/team can test Admin role easily
+    val isAdmin: Boolean = false,
     val accountStatus: AccountStatus = AccountStatus.ACTIVE,
     val registrationDateMillis: Long = System.currentTimeMillis()
 )
