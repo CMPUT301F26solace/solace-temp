@@ -39,6 +39,19 @@ class NotificationPreferenceRulesTest {
     }
 
     @Test
+    fun ownerWaitlistMessagesAreAlsoPosted() {
+        val broadcast = AppNotification(id = "broadcast-note", recipientId = "entrant-1", broadcastId = "broadcast-1")
+        val alerts = NotificationPreferenceRules.systemAlertsToPost(optedIn, listOf(broadcast, update), emptySet())
+        assertEquals(listOf(broadcast), alerts)
+    }
+
+    @Test
+    fun alreadySeenNotificationsAreNotPosted() {
+        val alerts = NotificationPreferenceRules.systemAlertsToPost(optedIn, listOf(seenWin), emptySet())
+        assertTrue(alerts.isEmpty())
+    }
+
+    @Test
     fun badgeCountsUnseenNotificationsWhenOptedIn() {
         assertEquals(2, NotificationPreferenceRules.unreadBadgeCount(optedIn, listOf(win, update, seenWin)))
     }

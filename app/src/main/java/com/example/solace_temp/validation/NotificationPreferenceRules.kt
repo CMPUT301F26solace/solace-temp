@@ -13,7 +13,8 @@ import com.example.solace_temp.models.UserRole
 /** Decides which notifications are surfaced to the user, based on their notification preference. */
 object NotificationPreferenceRules {
     /**
-     * Returns the notifications that should be posted to the status bar.
+     * Returns the notifications that should be posted to the status bar:
+     * unseen lottery wins and owner waitlist messages.
      *
      * @param profile The current user's profile.
      * @param notifications Notifications addressed to the current user.
@@ -25,7 +26,11 @@ object NotificationPreferenceRules {
         alreadyHandled: Set<String>
     ): List<AppNotification> {
         if (!profile.receiveNotifications) return emptyList()
-        return notifications.filter { it.isLotteryWin && it.id !in alreadyHandled }
+        return notifications.filter {
+            (it.isLotteryWin || it.broadcastId.isNotBlank()) &&
+                !it.isSeen &&
+                it.id !in alreadyHandled
+        }
     }
 
     /**

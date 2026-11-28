@@ -213,6 +213,7 @@ data class Reservation(
  * @property timestamp A formatted timestamp for the notification.
  * @property isLotteryWin Indicates if this notification represents a lottery win.
  * @property isSeen Indicates if the notification has been viewed by the recipient.
+ * @property broadcastId ID of the owner broadcast this notification belongs to, or blank if it was sent by the system.
  */
 data class AppNotification(
     val id: String = "",
@@ -225,7 +226,37 @@ data class AppNotification(
     @get:PropertyName("isLotteryWin")
     val isLotteryWin: Boolean = false,
     @get:PropertyName("isSeen")
-    val isSeen: Boolean = false
+    val isSeen: Boolean = false,
+    val broadcastId: String = ""
+)
+
+/**
+ * Record of a message a campsite owner sent to the entrants on a lottery's waitlist.
+ *
+ * @property id Unique identifier for the broadcast.
+ * @property ownerId Device ID of the owner who sent the message.
+ * @property lotteryId ID of the lottery whose waitlist was notified.
+ * @property lotteryName Name of the lottery when the message was sent.
+ * @property campsiteId ID of the lottery's first campsite.
+ * @property campsiteName Name of that campsite when the message was sent.
+ * @property title The notification title.
+ * @property message The full notification message.
+ * @property recipientIds Device IDs of the entrants who received the message.
+ * @property recipientCount Number of entrants who received the message.
+ * @property sentAtMillis Epoch timestamp in milliseconds when the message was sent.
+ */
+data class BroadcastNotification(
+    val id: String = "",
+    val ownerId: String = "",
+    val lotteryId: String = "",
+    val lotteryName: String = "",
+    val campsiteId: String = "",
+    val campsiteName: String = "",
+    val title: String = "",
+    val message: String = "",
+    val recipientIds: List<String> = emptyList(),
+    val recipientCount: Int = 0,
+    val sentAtMillis: Long = System.currentTimeMillis()
 )
 
 /**
@@ -317,6 +348,8 @@ fun Reservation.isUpcomingAndCancellable(
     if (!earliestDate.matches(Regex("""\d{4}-\d{2}-\d{2}"""))) return true
     return earliestDate >= todayIso
 }
+
+/**
  * Summarizes dependent records associated with a campsite prior to administrative removal (US 03.01.01).
  * Used by the UI to warn administrators about active reservations, open lotteries, and assets
  * that will be cancelled or cleaned up upon deletion.

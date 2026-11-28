@@ -18,6 +18,7 @@ import android.util.Log
 import com.example.solace_temp.models.*
 import com.example.solace_temp.validation.WaitingListException
 import com.example.solace_temp.validation.WaitingListRules
+import com.example.solace_temp.validation.WaitlistNotificationRules
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
@@ -996,6 +997,76 @@ class FirestoreAppRepository(context: Context) : AppRepository {
                 onResult(
                     Result.failure(
                         Exception("Could not cancel reservation: ${error.localizedMessage ?: "Please try again."}", error)
+                    )
+                )
+            }
+    }
+
+    /**
+     * Writes one notification per waitlisted recipient and a broadcast record in a single batch,
+     * so either every recipient is notified or nothing is saved.
+     */
+    override fun sendWaitlistNotification(
+        lotteryId: String,
+        title: String,
+        message: String,
+        onResult: (Result<BroadcastNotification>) -> Unit
+    ) {
+        val lottery = _lotteries.value.find { it.id == lotteryId }
+        if (lottery == null) {
+            onResult(Result.failure(NoSuchElementException("This lottery could not be found.")))
+            return
+        }
+        val recipients = WaitlistNotificationRules.recipients(lottery, _profiles.value)
+        WaitlistNotificationRules.sendError(lottery, deviceId, title, message, recipients)?.let { error ->
+            onResult(Result.failure(IllegalArgumentException(error)))
+            return
+        }
+
+        val sentAt = System.currentTimeMillis()
+        val campsiteId = lottery.campsiteIds.firstOrNull().orEmpty()
+        val broadcast = BroadcastNotification(
+            id = "broadcast-${UUID.randomUUID().toString().take(8)}",
+            ownerId = deviceId,
+            lotteryId = lottery.id,
+            lotteryName = lottery.name,
+            campsiteId = campsiteId,
+            campsiteName = _campsites.value.find { it.id == campsiteId }?.name.orEmpty(),
+            title = title.trim(),
+            message = message.trim(),
+            recipientIds = recipients,
+            recipientCount = recipients.size,
+            sentAtMillis = sentAt
+        )
+        val formattedTime = SimpleDateFormat("MMM dd, yyyy · h:mm a", Locale.getDefault())
+            .format(Date(sentAt))
+
+        val batch = db.batch()
+        recipients.forEach { entrantId ->
+            val notifId = "notif-${broadcast.id}-$entrantId"
+            batch.set(
+                db.collection("notifications").document(notifId),
+                AppNotification(
+                    id = notifId,
+                    recipientId = entrantId,
+                    senderId = deviceId,
+                    campsiteId = campsiteId,
+                    title = broadcast.title,
+                    message = broadcast.message,
+                    timestamp = formattedTime,
+                    broadcastId = broadcast.id
+                )
+            )
+        }
+        batch.set(db.collection("broadcasts").document(broadcast.id), broadcast)
+
+        batch.commit()
+            .addOnSuccessListener { onResult(Result.success(broadcast)) }
+            .addOnFailureListener { error ->
+                Log.e("FirestoreRepo", "Failed to send waitlist notification for ${lottery.id}", error)
+                onResult(
+                    Result.failure(
+                        Exception("Could not send the notification: ${error.localizedMessage ?: "Please try again."}", error)
                     )
                 )
             }
