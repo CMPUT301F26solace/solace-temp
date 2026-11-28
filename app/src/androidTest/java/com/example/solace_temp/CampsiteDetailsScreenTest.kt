@@ -192,4 +192,33 @@ class CampsiteDetailsScreenTest {
         // Verify repository state updated
         assertEquals("Updated Campsite Name", fakeRepo._campsites.value.first().name)
     }
+
+    @Test
+    fun ownerQrAccessPass_revealInstantlyButtonRevealsPass() {
+        val fakeRepo = FakeAppRepository()
+        fakeRepo._currentProfile.value = Profile(
+            deviceId = "owner-123",
+            role = UserRole.CAMPSITE_OWNER,
+            isAdmin = false
+        )
+        val campsite = Campsite(
+            id = "camp-qr-reveal",
+            ownerId = "owner-123",
+            name = "Reveal Pass Camp",
+            qrCodePayload = "solace://campsite/camp-qr-reveal"
+        )
+        fakeRepo._campsites.value = listOf(campsite)
+
+        composeTestRule.setContent {
+            CampsiteDetailsScreen(
+                campsiteId = "camp-qr-reveal",
+                repository = fakeRepo,
+                onBack = {}
+            )
+        }
+
+        composeTestRule.onNodeWithText("Scratch to Reveal").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_reveal_qr_instantly").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Revealed").performScrollTo().assertIsDisplayed()
+    }
 }

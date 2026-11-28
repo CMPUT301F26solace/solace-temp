@@ -8,7 +8,11 @@
  */
 package com.example.solace_temp.ui.screens
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,12 +21,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -48,14 +56,31 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.solace_temp.data.AppRepository
 import com.example.solace_temp.models.ReservationStatus
+import com.example.solace_temp.ui.components.ScratchRevealCanvas
+import com.example.solace_temp.ui.theme.CardSurface
+import com.example.solace_temp.ui.theme.Neutral300
+import com.example.solace_temp.ui.theme.Neutral50
+import com.example.solace_temp.ui.theme.Neutral600
+import com.example.solace_temp.ui.theme.Neutral900
+import com.example.solace_temp.ui.theme.SolaceInnerCardShape
+import com.example.solace_temp.ui.theme.SolaceRed
+import com.example.solace_temp.ui.theme.SolaceTokens
+import com.example.solace_temp.ui.theme.StatusActiveBg
+import com.example.solace_temp.ui.theme.StatusActiveGreen
+import com.example.solace_temp.ui.theme.TabularText
+import com.example.solace_temp.ui.theme.solaceCardBorder
 import com.example.solace_temp.validation.WaitingListRules
 import kotlinx.coroutines.delay
 
@@ -242,44 +267,129 @@ fun EntrantLotteryPlaceholderScreen(
 
                 // Dynamic Entrant Status & Interaction Section
                 if (isWinner) {
-                    // WINNER VIEW: Shows winning banner and "Select Dates & Book" button
+                    var isWinnerPassRevealed by rememberSaveable(lottery.id) { mutableStateOf(false) }
+
+                    // WINNER VIEW: Shows winning banner, scratch-reveal ticket, and "Select Dates & Book" button
                     Card(
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(SolaceTokens.RadiusXL),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            containerColor = CardSurface
                         ),
+                        border = solaceCardBorder(),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
-                            modifier = Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            modifier = Modifier.padding(SolaceTokens.SpaceXL),
+                            verticalArrangement = Arrangement.spacedBy(SolaceTokens.SpaceMD)
                         ) {
                             Text(
                                 text = "🎉 You Won the Lottery!",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = Neutral900
                             )
                             Text(
-                                text = "You have been selected in the draw! Confirm your camping dates below to secure your campsite reservation.",
-                                style = MaterialTheme.typography.bodyMedium
+                                text = "You have been selected in the draw! Scratch your winner pass below or tap instant reveal, then confirm your camping dates.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Neutral600
                             )
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 96.dp)
+                                    .clip(SolaceInnerCardShape)
+                                    .background(StatusActiveBg)
+                                    .border(
+                                        SolaceTokens.HairlineWidth,
+                                        StatusActiveGreen.copy(alpha = 0.25f),
+                                        SolaceInnerCardShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(SolaceTokens.SpaceMD),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(SolaceTokens.SpaceXS)
+                                ) {
+                                    Text(
+                                        text = "OFFICIAL WINNER INVITATION",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = StatusActiveGreen
+                                    )
+                                    Text(
+                                        text = campsiteNames,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Neutral900,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    TabularText(
+                                        text = "Booking Window: ${lottery.bookingStart} – ${lottery.bookingEnd}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Neutral600
+                                    )
+                                }
+
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = !isWinnerPassRevealed,
+                                    enter = EnterTransition.None,
+                                    exit = fadeOut(animationSpec = tween(220)),
+                                    modifier = Modifier.matchParentSize()
+                                ) {
+                                    ScratchRevealCanvas(
+                                        modifier = Modifier.fillMaxSize(),
+                                        overlayColor = Neutral300,
+                                        strokeWidth = 64f,
+                                        revealThreshold = 0.45f,
+                                        onFullyRevealed = { isWinnerPassRevealed = true }
+                                    )
+                                }
+                            }
+
+                            if (!isWinnerPassRevealed) {
+                                OutlinedButton(
+                                    onClick = { isWinnerPassRevealed = true },
+                                    shape = RoundedCornerShape(SolaceTokens.RadiusPill),
+                                    border = solaceCardBorder(),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = Neutral50,
+                                        contentColor = Neutral900
+                                    ),
+                                    modifier = Modifier
+                                        .align(Alignment.CenterHorizontally)
+                                        .testTag("btn_entrant_reveal_winner_instantly")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Visibility,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(SolaceTokens.SpaceSM))
+                                    Text("Reveal Pass Instantly", style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
 
                             if (activeBooking != null) {
                                 Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = SolaceInnerCardShape,
+                                    color = Neutral50,
+                                    border = solaceCardBorder(),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Column(Modifier.padding(12.dp)) {
+                                    Column(Modifier.padding(SolaceTokens.SpaceMD)) {
                                         Text(
                                             "✓ Confirmed Reservation",
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF2E7D32)
+                                            color = StatusActiveGreen
                                         )
-                                        Text(
-                                            "Booked Nights: ${activeBooking.bookedDates.joinToString(", ")}",
-                                            style = MaterialTheme.typography.bodySmall
+                                        TabularText(
+                                            text = "Booked Nights: ${activeBooking.bookedDates.joinToString(", ")}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 2
                                         )
                                     }
                                 }
@@ -288,17 +398,19 @@ fun EntrantLotteryPlaceholderScreen(
                             Button(
                                 onClick = { showBookingDialog = true },
                                 modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(SolaceTokens.RadiusMD),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary
+                                    containerColor = SolaceRed,
+                                    contentColor = Color.White
                                 )
                             ) {
-                                Text("Select Dates & Book")
+                                Text("Select Dates & Book", style = MaterialTheme.typography.labelLarge)
                             }
 
                             if (bookingFeedback.isNotBlank()) {
                                 Text(
                                     text = bookingFeedback,
-                                    color = if (bookingFeedback.startsWith("Error")) MaterialTheme.colorScheme.error else Color(0xFF2E7D32),
+                                    color = if (bookingFeedback.startsWith("Error")) MaterialTheme.colorScheme.error else StatusActiveGreen,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold
                                 )
