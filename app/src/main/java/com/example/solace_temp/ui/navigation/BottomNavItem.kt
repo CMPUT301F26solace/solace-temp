@@ -66,6 +66,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.solace_temp.models.UserRole
 import com.example.solace_temp.ui.components.LocalReduceMotion
 import com.example.solace_temp.ui.theme.CardSurface
@@ -168,7 +169,8 @@ fun getBottomNavItemsForRole(role: UserRole, isAdmin: Boolean = true): List<Bott
 }
 
 /**
- * Floating pill navigation bar styled for the Campsite Owner #FFFFFF / crimson accent palette.
+ * Floating pill navigation bar styled with the Solace #FFFFFF / crimson accent palette,
+ * shared across all role views (Entrant, Campsite Owner, and Admin).
  * Uses a single GPU-composited sliding indicator (`graphicsLayer { translationX; scaleX; scaleY }`)
  * and per-item tactile press feedback so tab switching stays locked at 60 fps.
  */
@@ -339,9 +341,18 @@ fun SolaceFloatingBottomBar(
 
                         Spacer(modifier = Modifier.height(2.dp))
 
+                        val labelStyle = if (safeItems.size > 4) {
+                            MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                letterSpacing = 0.sp
+                            )
+                        } else {
+                            MaterialTheme.typography.labelSmall
+                        }
+
                         Text(
                             text = item.label,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = labelStyle,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             color = contentTint,
                             maxLines = 1,

@@ -67,4 +67,95 @@ class SolaceBottomNavBarTest {
         assertEquals(BottomNavItem.ProfileTab, lastClicked)
         composeTestRule.onNodeWithTag("bottom_nav_profile").assertIsSelected()
     }
+
+    @Test
+    fun entrantBottomNavBar_rendersAllEntrantItemsBadgeAndUpdatesSelection() {
+        val entrantItems = getBottomNavItemsForRole(UserRole.ENTRANT, isAdmin = false)
+        var lastClicked: BottomNavItem? = null
+
+        composeTestRule.setContent {
+            var selected by remember { mutableStateOf<BottomNavItem>(BottomNavItem.EntrantHome) }
+            SolaceFloatingBottomBar(
+                navItems = entrantItems,
+                selectedItem = selected,
+                unseenNotificationCount = 3,
+                onSelectItem = { item ->
+                    selected = item
+                    lastClicked = item
+                }
+            )
+        }
+
+        // Verify all 5 Entrant pill tabs and notification badge are displayed
+        composeTestRule.onNodeWithText("Home").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Search").assertIsDisplayed()
+        composeTestRule.onNodeWithText("QR Scan").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Notifications").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Profile").assertIsDisplayed()
+        composeTestRule.onNodeWithText("3").assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag("bottom_nav_entrant_home").assertIsSelected()
+
+        // Tap Search tab
+        composeTestRule.onNodeWithTag("bottom_nav_entrant_search").performClick()
+        assertEquals(BottomNavItem.EntrantSearch, lastClicked)
+        composeTestRule.onNodeWithTag("bottom_nav_entrant_search").assertIsSelected()
+
+        // Tap QR Scan tab
+        composeTestRule.onNodeWithTag("bottom_nav_entrant_qr_scan").performClick()
+        assertEquals(BottomNavItem.EntrantQrScan, lastClicked)
+        composeTestRule.onNodeWithTag("bottom_nav_entrant_qr_scan").assertIsSelected()
+
+        // Tap Notifications tab
+        composeTestRule.onNodeWithTag("bottom_nav_entrant_notifications").performClick()
+        assertEquals(BottomNavItem.EntrantNotifications, lastClicked)
+        composeTestRule.onNodeWithTag("bottom_nav_entrant_notifications").assertIsSelected()
+
+        // Tap Profile tab
+        composeTestRule.onNodeWithTag("bottom_nav_profile").performClick()
+        assertEquals(BottomNavItem.ProfileTab, lastClicked)
+        composeTestRule.onNodeWithTag("bottom_nav_profile").assertIsSelected()
+    }
+
+    @Test
+    fun adminBottomNavBar_rendersAllAdminItemsAndUpdatesSelection() {
+        val adminItems = getBottomNavItemsForRole(UserRole.ADMIN, isAdmin = true)
+        var lastClicked: BottomNavItem? = null
+
+        composeTestRule.setContent {
+            var selected by remember { mutableStateOf<BottomNavItem>(BottomNavItem.AdminCampsites) }
+            SolaceFloatingBottomBar(
+                navItems = adminItems,
+                selectedItem = selected,
+                unseenNotificationCount = 0,
+                onSelectItem = { item ->
+                    selected = item
+                    lastClicked = item
+                }
+            )
+        }
+
+        // Verify all 4 Admin pill tabs are displayed
+        composeTestRule.onNodeWithText("Campsites").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Profiles").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Logs").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Profile").assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag("bottom_nav_admin_campsites").assertIsSelected()
+
+        // Tap Profiles tab
+        composeTestRule.onNodeWithTag("bottom_nav_admin_profiles").performClick()
+        assertEquals(BottomNavItem.AdminProfiles, lastClicked)
+        composeTestRule.onNodeWithTag("bottom_nav_admin_profiles").assertIsSelected()
+
+        // Tap Logs tab
+        composeTestRule.onNodeWithTag("bottom_nav_admin_logs").performClick()
+        assertEquals(BottomNavItem.AdminLogs, lastClicked)
+        composeTestRule.onNodeWithTag("bottom_nav_admin_logs").assertIsSelected()
+
+        // Tap Profile tab
+        composeTestRule.onNodeWithTag("bottom_nav_profile").performClick()
+        assertEquals(BottomNavItem.ProfileTab, lastClicked)
+        composeTestRule.onNodeWithTag("bottom_nav_profile").assertIsSelected()
+    }
 }

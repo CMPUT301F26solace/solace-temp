@@ -17,16 +17,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -35,12 +31,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -175,121 +168,39 @@ fun SolaceCampsiteApp() {
 
     CompositionLocalProvider(LocalReduceMotion provides reduceMotion) {
         Scaffold(
-            containerColor = if (profile.role == UserRole.CAMPSITE_OWNER) {
-                OwnerBackground
-            } else {
-                MaterialTheme.colorScheme.background
-            },
+            containerColor = OwnerBackground,
             bottomBar = {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
 
-                if (profile.role == UserRole.CAMPSITE_OWNER) {
-                    val selectedNavItem = navItems.find { it.route == currentRoute }
-                        ?: if (currentRoute?.startsWith("lottery") == true ||
-                            currentRoute?.startsWith("owner_waitlist") == true
-                        ) {
-                            BottomNavItem.OwnerLottery
-                        } else {
-                            navItems.first()
-                        }
+                val selectedNavItem = navItems.find { it.route == currentRoute }
+                    ?: when {
+                        currentRoute == "policy_and_guidelines" ->
+                            navItems.find { it == BottomNavItem.ProfileTab } ?: navItems.first()
+                        currentRoute?.startsWith("profile_details") == true ->
+                            navItems.find { it == BottomNavItem.AdminProfiles } ?: navItems.first()
+                        currentRoute?.startsWith("campsite_reservation") == true ->
+                            navItems.find { it == BottomNavItem.EntrantNotifications } ?: navItems.first()
+                        currentRoute?.startsWith("lottery") == true ||
+                            currentRoute?.startsWith("owner_waitlist") == true ->
+                            navItems.find { it == BottomNavItem.OwnerLottery } ?: navItems.first()
+                        else -> navItems.first()
+                    }
 
-                    SolaceFloatingBottomBar(
-                        navItems = navItems,
-                        selectedItem = selectedNavItem,
-                        unseenNotificationCount = unseenCount,
-                        onSelectItem = { item ->
-                            navController.navigate(item.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
+                SolaceFloatingBottomBar(
+                    navItems = navItems,
+                    selectedItem = selectedNavItem,
+                    unseenNotificationCount = unseenCount,
+                    onSelectItem = { item ->
+                        navController.navigate(item.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
                             }
-                        }
-                    )
-                } else {
-                    Surface(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        shadowElevation = 8.dp,
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
-                    ) {
-                        NavigationBar(
-                            containerColor = Color.Transparent,
-                            tonalElevation = 0.dp,
-                            windowInsets = WindowInsets(0, 0, 0, 0)
-                        ) {
-                            navItems.forEach { item ->
-                                val selected = currentRoute == item.route
-
-                                // Icon scale animation
-                                val scale by animateFloatAsState(
-                                    targetValue = if (selected) 1.2f else 1.0f,
-                                    animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                        stiffness = Spring.StiffnessLow
-                                    ),
-                                    label = "scale_anim"
-                                )
-
-                                NavigationBarItem(
-                                    selected = selected,
-                                    onClick = {
-                                        navController.navigate(item.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
-                                            }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    },
-                                    icon = {
-                                        if (item == BottomNavItem.EntrantNotifications && unseenCount > 0) {
-                                            BadgedBox(
-                                                badge = {
-                                                    Badge {
-                                                        Text(
-                                                            text = if (unseenCount > 99) "99+" else unseenCount.toString()
-                                                        )
-                                                    }
-                                                }
-                                            ) {
-                                                Icon(
-                                                    item.icon,
-                                                    contentDescription = item.label,
-                                                    modifier = Modifier.scale(scale)
-                                                )
-                                            }
-                                        } else {
-                                            Icon(
-                                                item.icon,
-                                                contentDescription = item.label,
-                                                modifier = Modifier.scale(scale)
-                                            )
-                                        }
-                                    },
-                                    label = {
-                                        Text(
-                                            text = item.label,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    },
-                                    alwaysShowLabel = false,
-                                    colors = NavigationBarItemDefaults.colors(
-                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                )
-                            }
+                            launchSingleTop = true
+                            restoreState = true
                         }
                     }
-                }
+                )
             }
         ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize()) {
