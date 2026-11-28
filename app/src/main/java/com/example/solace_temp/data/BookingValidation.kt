@@ -1,3 +1,12 @@
+/**
+ * BookingValidation.kt
+ * 
+ * Purpose: Provides helper functions to calculate booking nights and validate winner eligibility,
+ * check-in/check-out date ranges, campsite availability, and reservation date collisions.
+ * 
+ * Issues / Outstanding Issues:
+ * - Validation relies on local device clock for past date checks; backend enforcement ensures server-side time consistency.
+ */
 package com.example.solace_temp.data
 
 import com.example.solace_temp.models.Campsite

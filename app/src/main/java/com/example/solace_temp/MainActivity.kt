@@ -99,7 +99,7 @@ fun SolaceCampsiteApp() {
     val repository = remember { FirestoreAppRepository(context) }
     val profile by repository.currentProfile.collectAsState()
     val navController = rememberNavController()
-    val navItems = getBottomNavItemsForRole(profile.role)
+    val navItems = getBottomNavItemsForRole(profile.role, profile.isAdmin)
     val scope = rememberCoroutineScope()
 
     val lotteries by repository.lotteries.collectAsState()
@@ -146,10 +146,14 @@ fun SolaceCampsiteApp() {
         }
     }
 
-    // Automatically jump to the first tab of the new role when switching roles
-    LaunchedEffect(profile.role) {
-        navController.navigate(navItems.first().route) {
-            popUpTo(0)
+    // Automatically jump to the first tab of the new role when switching roles, and guard against unauthorized Admin role when !isAdmin
+    LaunchedEffect(profile.role, profile.isAdmin) {
+        if (!profile.isAdmin && profile.role == UserRole.ADMIN) {
+            repository.switchRole(UserRole.ENTRANT)
+        } else {
+            navController.navigate(navItems.first().route) {
+                popUpTo(0)
+            }
         }
     }
 
@@ -310,16 +314,18 @@ fun SolaceCampsiteApp() {
                     CampsiteReservationScreen(
                         campsiteId = campsiteId,
                         notificationId = notificationId,
-                        onReservationConfirmed = {
+                        onReservationConfirmed = { startDate, endDate, onError ->
                             scope.launch {
                                 val success = repository.createReservation(
                                     campsiteId = campsiteId,
                                     notificationId = notificationId,
-                                    startDate = "2026-07-01",
-                                    endDate = "2026-07-07"
+                                    startDate = startDate,
+                                    endDate = endDate
                                 )
                                 if (success) {
                                     navController.popBackStack()
+                                } else {
+                                    onError("Could not confirm booking. One or more selected dates may already be booked.")
                                 }
                             }
                         },
@@ -331,7 +337,8 @@ fun SolaceCampsiteApp() {
 
                 composable(AppScreen.EntrantReservations.route) {
                     EntrantReservationsScreen(
-                        repository = repository
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
                     )
                 }
 
@@ -424,7 +431,8 @@ fun SolaceCampsiteApp() {
                 composable(BottomNavItem.ProfileTab.route) {
                     ProfileAndRoleScreen(
                         repository = repository,
-                        onNavigateToPolicy = { navController.navigate("policy_and_guidelines") }
+                        onNavigateToPolicy = { navController.navigate("policy_and_guidelines") },
+                        onNavigateToReservations = { navController.navigate(AppScreen.EntrantReservations.route) }
                     )
                 }
                 composable("policy_and_guidelines") {

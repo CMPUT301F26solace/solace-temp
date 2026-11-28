@@ -1,3 +1,11 @@
+/**
+ * CampsiteDialogs.kt
+ * 
+ * Purpose: Provides dialog composables for editing campsite details, managing image assets, and confirming administrative deletions.
+ * 
+ * Issues / Outstanding Issues:
+ * - Image asset updates require internet connectivity when uploading to Firebase Storage.
+ */
 package com.example.solace_temp.ui.screens
 
 import android.net.Uri

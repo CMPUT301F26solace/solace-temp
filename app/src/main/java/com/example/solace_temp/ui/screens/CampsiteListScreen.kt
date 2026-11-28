@@ -1,3 +1,11 @@
+/**
+ * CampsiteListScreen.kt
+ * 
+ * Purpose: Composable screen rendering the list of available campsites with search, filter, and tag chips for entrants and admins.
+ * 
+ * Issues / Outstanding Issues:
+ * - Advanced multi-criteria filters combine iteratively on the current in-memory flow.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background

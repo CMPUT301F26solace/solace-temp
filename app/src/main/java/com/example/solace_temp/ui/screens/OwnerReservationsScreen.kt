@@ -1,3 +1,12 @@
+/**
+ * OwnerReservationsScreen.kt
+ * 
+ * Purpose: Composable screen allowing campsite owners to view, inspect, and manage active and upcoming
+ * confirmed reservations across their registered campsites.
+ * 
+ * Issues / Outstanding Issues:
+ * - Reservation cancellation and status modifications by owners are currently handled via admin intervention.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.clickable

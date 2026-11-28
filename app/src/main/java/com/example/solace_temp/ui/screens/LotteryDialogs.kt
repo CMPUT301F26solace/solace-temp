@@ -1,3 +1,11 @@
+/**
+ * LotteryDialogs.kt
+ * 
+ * Purpose: Dialog composables for creating and editing lottery configurations, validating date windows, winner counts, and waitlist capacity limits.
+ * 
+ * Issues / Outstanding Issues:
+ * - Enforces minimum 1-week gap between registration close and booking period start.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.clickable

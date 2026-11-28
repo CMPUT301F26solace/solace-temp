@@ -1,3 +1,11 @@
+/**
+ * OwnerCampsitesScreen.kt
+ * 
+ * Purpose: Composable screen displaying a campsite owner's registered properties with quick management actions and lottery creation triggers.
+ * 
+ * Issues / Outstanding Issues:
+ * - Deleting a campsite cleans up associated lotteries and reservations.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.background

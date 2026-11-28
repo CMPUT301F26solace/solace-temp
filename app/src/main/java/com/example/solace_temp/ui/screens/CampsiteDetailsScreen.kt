@@ -1,3 +1,11 @@
+/**
+ * CampsiteDetailsScreen.kt
+ * 
+ * Purpose: Composable screen rendering detailed information for a single campsite, including amenities, rules, lottery waitlist status, and booking triggers.
+ * 
+ * Issues / Outstanding Issues:
+ * - QR code scanning navigates directly to campsite details based on the deep link payload.
+ */
 package com.example.solace_temp.ui.screens
 
 import androidx.compose.foundation.Image
@@ -364,9 +372,9 @@ fun CampsiteDetailsScreen(
             }
 
             // CAMPSITE OWNER QR CODE & MANAGEMENT SECTION
-            val isAuthorizedOwner = profile.deviceId == campsite.ownerId || profile.isAdmin
+            val isAuthorizedOwner = profile.deviceId == campsite.ownerId || (profile.isAdmin && profile.role == UserRole.ADMIN)
 
-            if ((profile.role == UserRole.CAMPSITE_OWNER || profile.role == UserRole.ADMIN) && isAuthorizedOwner) {
+            if ((profile.role == UserRole.CAMPSITE_OWNER || (profile.role == UserRole.ADMIN && profile.isAdmin)) && isAuthorizedOwner) {
                 Card(
                     shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

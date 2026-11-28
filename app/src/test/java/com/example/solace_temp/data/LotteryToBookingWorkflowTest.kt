@@ -141,4 +141,197 @@ class LotteryToBookingWorkflowTest {
             campsiteId?.let { repo.removeCampsiteAsAdmin(it) }
         }
     }
+
+    @Test
+    fun declineLotteryInvitationRemovesEntrantAndRedrawPicksReplacement() = kotlinx.coroutines.runBlocking {
+        val repo = MockAppRepository
+        val originalProfile = repo.currentProfile.value
+        val ownerId = originalProfile.deviceId
+        val suffix = UUID.randomUUID().toString().take(8)
+        val entrant1 = "entrant-decline-1-$suffix"
+        val entrant2 = "entrant-decline-2-$suffix"
+        val now = System.currentTimeMillis()
+        val day = 86_400_000L
+        var campsiteId: String? = null
+
+        try {
+            val campsite = repo.createCampsite(
+                Campsite(ownerId = ownerId, name = "Decline Test Camp")
+            )
+            campsiteId = campsite.id
+            val lottery = repo.createLottery(
+                Lottery(
+                    ownerId = ownerId,
+                    campsiteIds = listOf(campsite.id),
+                    registrationStartMillis = now - 2 * day,
+                    registrationEndMillis = now - day,
+                    bookingStartMillis = now - day / 2,
+                    bookingEndMillis = now + 10 * day,
+                    maxWinners = 1
+                )
+            )
+
+            // Both entrants join waitlist
+            for (id in listOf(entrant1, entrant2)) {
+                repo.updateProfile(originalProfile.copy(deviceId = id, role = UserRole.ENTRANT))
+                repo.joinWaitingList(lottery.id, id) {}
+            }
+
+            // Draw 1 winner (with maxWinners = 1, one of them will win)
+            repo.updateProfile(originalProfile.copy(role = UserRole.CAMPSITE_OWNER))
+            repo.drawLotteryWinners(lottery.id)
+            val initialDrawn = repo.lotteries.value.single { it.id == lottery.id }
+            assertEquals(1, initialDrawn.invitedWinnerIds.size)
+            val winnerId = initialDrawn.invitedWinnerIds.first()
+            val remainingId = if (winnerId == entrant1) entrant2 else entrant1
+
+            // Winner declines invitation
+            repo.updateProfile(originalProfile.copy(deviceId = winnerId, role = UserRole.ENTRANT))
+            val notif = repo.notifications.value.first { it.recipientId == winnerId && it.isLotteryWin }
+            repo.declineLotteryInvitation(notif.id, campsite.id)
+
+            val updatedAfterDecline = repo.lotteries.value.single { it.id == lottery.id }
+            assertFalse(winnerId in updatedAfterDecline.invitedWinnerIds)
+            assertFalse(winnerId in updatedAfterDecline.waitingListEntrantIds)
+
+            // Owner triggers redraw
+            repo.updateProfile(originalProfile.copy(role = UserRole.CAMPSITE_OWNER))
+            repo.redrawLottery(lottery.id)
+
+            val redrawn = repo.lotteries.value.single { it.id == lottery.id }
+            assertEquals(listOf(remainingId), redrawn.invitedWinnerIds)
+            assertFalse(winnerId in redrawn.invitedWinnerIds)
+        } finally {
+            repo.updateProfile(originalProfile)
+            campsiteId?.let { repo.removeCampsiteAsAdmin(it) }
+        }
+    }
+
+    @Test
+    fun redrawLotteryDoesNotAddWinnersWhenMaxWinnersCapacityFull() {
+        val repo = MockAppRepository
+        val originalProfile = repo.currentProfile.value
+        val ownerId = originalProfile.deviceId
+        val suffix = UUID.randomUUID().toString().take(8)
+        val entrant1 = "entrant-full-1-$suffix"
+        val entrant2 = "entrant-full-2-$suffix"
+        val now = System.currentTimeMillis()
+        val day = 86_400_000L
+        var campsiteId: String? = null
+
+        try {
+            val campsite = repo.createCampsite(
+                Campsite(ownerId = ownerId, name = "Capacity Test Camp")
+            )
+            campsiteId = campsite.id
+            val lottery = repo.createLottery(
+                Lottery(
+                    ownerId = ownerId,
+                    campsiteIds = listOf(campsite.id),
+                    registrationStartMillis = now - 2 * day,
+                    registrationEndMillis = now - day,
+                    bookingStartMillis = now - day / 2,
+                    bookingEndMillis = now + 10 * day,
+                    maxWinners = 1
+                )
+            )
+
+            for (id in listOf(entrant1, entrant2)) {
+                repo.updateProfile(originalProfile.copy(deviceId = id, role = UserRole.ENTRANT))
+                repo.joinWaitingList(lottery.id, id) {}
+            }
+
+            repo.updateProfile(originalProfile.copy(role = UserRole.CAMPSITE_OWNER))
+            repo.drawLotteryWinners(lottery.id)
+            val initialWinners = repo.lotteries.value.single { it.id == lottery.id }.invitedWinnerIds
+
+            // Attempting to redraw when maxWinners (1) is already satisfied should be a no-op
+            repo.redrawLottery(lottery.id)
+            val winnersAfterRedraw = repo.lotteries.value.single { it.id == lottery.id }.invitedWinnerIds
+            assertEquals(initialWinners, winnersAfterRedraw)
+        } finally {
+            repo.updateProfile(originalProfile)
+            campsiteId?.let { repo.removeCampsiteAsAdmin(it) }
+        }
+    }
+
+    @Test
+    fun drawLotteryWinnersHandlesEmptyWaitlistGracefully() {
+        val repo = MockAppRepository
+        val originalProfile = repo.currentProfile.value
+        val ownerId = originalProfile.deviceId
+        val now = System.currentTimeMillis()
+        val day = 86_400_000L
+        var campsiteId: String? = null
+
+        try {
+            val campsite = repo.createCampsite(
+                Campsite(ownerId = ownerId, name = "Empty Waitlist Camp")
+            )
+            campsiteId = campsite.id
+            val lottery = repo.createLottery(
+                Lottery(
+                    ownerId = ownerId,
+                    campsiteIds = listOf(campsite.id),
+                    registrationStartMillis = now - 2 * day,
+                    registrationEndMillis = now - day,
+                    bookingStartMillis = now - day / 2,
+                    bookingEndMillis = now + 10 * day,
+                    maxWinners = 3
+                )
+            )
+
+            repo.drawLotteryWinners(lottery.id)
+            val drawn = repo.lotteries.value.single { it.id == lottery.id }
+            assertTrue(drawn.isDrawn)
+            assertTrue(drawn.invitedWinnerIds.isEmpty())
+        } finally {
+            repo.updateProfile(originalProfile)
+            campsiteId?.let { repo.removeCampsiteAsAdmin(it) }
+        }
+    }
+
+    @Test
+    fun waitlistCapacityEnforcementAndLeaveReopensSlot() {
+        val repo = MockAppRepository
+        val originalProfile = repo.currentProfile.value
+        val suffix = UUID.randomUUID().toString().take(8)
+        val entrant1 = "capacity-entrant-1-$suffix"
+        val entrant2 = "capacity-entrant-2-$suffix"
+        val now = System.currentTimeMillis()
+        val day = 86_400_000L
+
+        val lottery = repo.createLottery(
+            Lottery(
+                ownerId = originalProfile.deviceId,
+                registrationStartMillis = now - day,
+                bookingEndMillis = now + 10 * day,
+                waitlistCapacity = 1
+            )
+        )
+
+        // First entrant joins
+        repo.updateProfile(originalProfile.copy(deviceId = entrant1, role = UserRole.ENTRANT))
+        var error1: String? = "Not set"
+        repo.joinWaitingList(lottery.id, entrant1, com.example.solace_temp.data.WaitingListErrorCallback { error1 = it })
+        assertNull(error1)
+
+        // Second entrant tries to join -> blocked because capacity = 1
+        repo.updateProfile(originalProfile.copy(deviceId = entrant2, role = UserRole.ENTRANT))
+        var error2: String? = "Not set"
+        repo.joinWaitingList(lottery.id, entrant2, com.example.solace_temp.data.WaitingListErrorCallback { error2 = it })
+        assertEquals("Waitlist is full.", error2)
+
+        // First entrant leaves
+        repo.updateProfile(originalProfile.copy(deviceId = entrant1, role = UserRole.ENTRANT))
+        repo.leaveWaitingList(lottery.id, entrant1)
+        assertFalse(entrant1 in repo.lotteries.value.single { it.id == lottery.id }.waitingListEntrantIds)
+
+        // Second entrant joins again -> succeeds now that slot opened
+        repo.updateProfile(originalProfile.copy(deviceId = entrant2, role = UserRole.ENTRANT))
+        var error3: String? = "Not set"
+        repo.joinWaitingList(lottery.id, entrant2, com.example.solace_temp.data.WaitingListErrorCallback { error3 = it })
+        assertNull(error3)
+        assertTrue(entrant2 in repo.lotteries.value.single { it.id == lottery.id }.waitingListEntrantIds)
+    }
 }

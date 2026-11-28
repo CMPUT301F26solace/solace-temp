@@ -18,6 +18,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Interface defining the primary data access and domain operations for the application.
@@ -137,6 +140,24 @@ interface AppRepository {
         onResult: (Result<String>) -> Unit
     ) {
         onResult(Result.success(imageUri.toString()))
+    }
+
+    /**
+     * Cancels an active campsite reservation for the current entrant and records a cancellation
+     * confirmation notification containing the campsite name, cancelled dates, and confirmation ID.
+     *
+     * @param reservationId The unique confirmation ID of the reservation to cancel.
+     * @param onResult Callback receiving a [CancellationOutcome] on success, or an error if cancellation fails.
+     */
+    fun cancelReservation(
+        reservationId: String,
+        onResult: (Result<CancellationOutcome>) -> Unit
+    ) {
+        onResult(
+            Result.failure(
+                UnsupportedOperationException("Reservation cancellation is not supported by this repository.")
+            )
+        )
     }
 
     /**
@@ -588,6 +609,9 @@ object MockAppRepository : AppRepository {
 
     /** Switches the user's role in the mock profile state. */
     override fun switchRole(newRole: UserRole) {
+        if (newRole == UserRole.ADMIN && !_currentProfile.value.isAdmin) {
+            return
+        }
         _currentProfile.update { it.copy(role = newRole) }
     }
 
@@ -679,6 +703,85 @@ object MockAppRepository : AppRepository {
                 }
             }
         }
+    }
+
+    /**
+     * Simulates cancelling an active reservation in memory and appending a cancellation
+     * confirmation notification to the entrant's in-app notification history.
+     */
+    override fun cancelReservation(
+        reservationId: String,
+        onResult: (Result<CancellationOutcome>) -> Unit
+    ) {
+        val currentUserId = _currentProfile.value.deviceId
+        val target = _reservations.value.find { it.id == reservationId }
+
+        // Validate that the reservation exists, belongs to this entrant, and is still active
+        when {
+            target == null -> {
+                onResult(Result.failure(NoSuchElementException("Reservation not found.")))
+                return
+            }
+            target.entrantId != currentUserId -> {
+                onResult(Result.failure(SecurityException("You can only cancel your own reservations.")))
+                return
+            }
+            target.status != ReservationStatus.ACTIVE -> {
+                onResult(Result.failure(IllegalStateException("This reservation is already ${target.status.name.lowercase()}.")))
+                return
+            }
+            !target.isUpcomingAndCancellable() -> {
+                onResult(Result.failure(IllegalStateException("Only upcoming active reservations can be cancelled.")))
+                return
+            }
+        }
+
+        val cancelledAt = System.currentTimeMillis()
+        val cancelledReservation = target.copy(
+            status = ReservationStatus.CANCELLED,
+            cancelledAtMillis = cancelledAt
+        )
+
+        // Update in-memory reservation state to CANCELLED
+        _reservations.update { list ->
+            list.map { if (it.id == reservationId) cancelledReservation else it }
+        }
+
+        // Format dates and timestamp for the in-app cancellation confirmation notification
+        val dateSummary = when {
+            cancelledReservation.bookedDates.isEmpty() -> "Dates not specified"
+            cancelledReservation.bookedDates.size == 1 -> cancelledReservation.bookedDates.first()
+            else -> "${cancelledReservation.bookedDates.first()} to ${cancelledReservation.bookedDates.last()}"
+        }
+        val formattedTime = SimpleDateFormat("MMM dd, yyyy · h:mm a", Locale.getDefault())
+            .format(Date(cancelledAt))
+        val siteName = cancelledReservation.campsiteName.ifBlank { "Campsite Reservation" }
+
+        // Record the cancellation confirmation in the entrant's notification log
+        val confirmationNotification = AppNotification(
+            id = "notif-cancel-${cancelledReservation.id}",
+            recipientId = currentUserId,
+            senderId = cancelledReservation.ownerId.ifBlank { "system" },
+            campsiteId = cancelledReservation.campsiteId,
+            title = "Reservation Cancelled",
+            message = "Your booking at $siteName ($dateSummary) has been cancelled. Confirmation ID: ${cancelledReservation.id}.",
+            timestamp = formattedTime,
+            isLotteryWin = false,
+            isSeen = false
+        )
+        _notifications.update { list ->
+            // Prepend so the newest cancellation confirmation appears at the top of the log
+            listOf(confirmationNotification) + list.filterNot { it.id == confirmationNotification.id }
+        }
+
+        onResult(
+            Result.success(
+                CancellationOutcome(
+                    cancelledReservation = cancelledReservation,
+                    notificationDelivered = true
+                )
+            )
+        )
     }
 
     /** Stores a confirmed booking in memory for UI tests and previews. */
@@ -881,7 +984,11 @@ object MockAppRepository : AppRepository {
         _lotteries.update { list ->
             list.map { lot ->
                 if (campsiteId in lot.campsiteIds) {
-                    lot.copy(invitedWinnerIds = lot.invitedWinnerIds.filterNot { it == currentDeviceId })
+                    lot.copy(
+                        invitedWinnerIds = lot.invitedWinnerIds.filterNot { it == currentDeviceId },
+                        waitingListEntrantIds = lot.waitingListEntrantIds.filterNot { it == currentDeviceId },
+                        waitlistJoinedAtMillis = lot.waitlistJoinedAtMillis - currentDeviceId
+                    )
                 } else lot
             }
         }

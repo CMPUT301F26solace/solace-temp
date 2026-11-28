@@ -1,3 +1,11 @@
+/**
+ * ScreenUtils.kt
+ * 
+ * Purpose: Helper utilities for screen formatting, QR code image generation, sharing payloads, and date string parsing.
+ * 
+ * Issues / Outstanding Issues:
+ * - QR code bitmatrix generation uses ZXing library defaults.
+ */
 package com.example.solace_temp.ui.screens
 
 import android.content.Context
