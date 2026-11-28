@@ -147,6 +147,80 @@ class FirestoreAppRepository(context: Context) : AppRepository {
 
     override val ownerEntrantMessages: StateFlow<List<OwnerEntrantMessage>> = _ownerEntrantMessages.asStateFlow()
 
+    private val _systemNotificationLogs = MutableStateFlow(
+        listOf(
+            SystemNotificationLog(
+                id = "notif-log-101",
+                senderId = "owner-8F92",
+                senderName = "John Campground Owner",
+                senderRole = UserRole.CAMPSITE_OWNER,
+                recipientIds = listOf("user-101", "user-102", "user-103", "user-104"),
+                targetAudienceGroup = "Waitlist Entrants",
+                campsiteId = "camp-banff-01",
+                campsiteName = "Tunnel Mountain Village I",
+                title = "Tunnel Mountain Draw Results Released",
+                messageBody = "Congratulations to all selected winners! Please check your invitation to confirm booking before the 48-hour deadline.",
+                type = NotificationType.LOTTERY_DRAW,
+                deliveryStatus = NotificationDeliveryStatus.SENT,
+                channel = NotificationChannel.BOTH,
+                timestampMillis = System.currentTimeMillis() - 3600000L * 3
+            ),
+            SystemNotificationLog(
+                id = "notif-log-102",
+                senderId = "owner-9999",
+                senderName = "Sarah Connor",
+                senderRole = UserRole.CAMPSITE_OWNER,
+                recipientIds = listOf("user-201", "user-202"),
+                targetAudienceGroup = "Registered Entrants",
+                campsiteId = "camp-hinton-02",
+                campsiteName = "Hinton-Grande Cache Pines",
+                title = "Weather Advisory & Cookhouse Maintenance",
+                messageBody = "Important update: The outdoor cookhouse will be under maintenance this Friday morning.",
+                type = NotificationType.OWNER_BROADCAST,
+                deliveryStatus = NotificationDeliveryStatus.SENT,
+                channel = NotificationChannel.IN_APP,
+                timestampMillis = System.currentTimeMillis() - 86400000L * 2
+            ),
+            SystemNotificationLog(
+                id = "notif-log-103",
+                senderId = "admin-sys-01",
+                senderName = "Solace Platform Admin",
+                senderRole = UserRole.ADMIN,
+                recipientIds = listOf("ALL_USERS"),
+                targetAudienceGroup = "All Platform Users",
+                campsiteId = "",
+                campsiteName = "",
+                title = "System Maintenance & Terms Update",
+                messageBody = "Solace platform scheduled maintenance will occur on Sunday between 2:00 AM and 4:00 AM MST.",
+                type = NotificationType.SYSTEM_UPDATE,
+                deliveryStatus = NotificationDeliveryStatus.SENT,
+                channel = NotificationChannel.PUSH_NOTIFICATION,
+                timestampMillis = System.currentTimeMillis() - 86400000L * 4
+            ),
+            SystemNotificationLog(
+                id = "notif-log-104",
+                senderId = "owner-8F92",
+                senderName = "John Campground Owner",
+                senderRole = UserRole.CAMPSITE_OWNER,
+                recipientIds = listOf("user-305"),
+                targetAudienceGroup = "Individual User",
+                campsiteId = "camp-banff-01",
+                campsiteName = "Tunnel Mountain Village I",
+                title = "Reservation Cancellation Notice",
+                messageBody = "Your reservation #res-banff-1001 status changed to CANCELLED.",
+                type = NotificationType.RESERVATION_ALERT,
+                deliveryStatus = NotificationDeliveryStatus.FAILED,
+                channel = NotificationChannel.PUSH_NOTIFICATION,
+                timestampMillis = System.currentTimeMillis() - 86400000L * 6
+            )
+        )
+    )
+
+    override val systemNotificationLogs: StateFlow<List<SystemNotificationLog>> = _systemNotificationLogs.asStateFlow()
+
+    private val _notificationLogsError = MutableStateFlow<String?>(null)
+    override val notificationLogsError: StateFlow<String?> = _notificationLogsError.asStateFlow()
+
     private val _adminAuditLogs = MutableStateFlow<List<AdminAuditAccessLog>>(emptyList())
     override val adminAuditLogs: StateFlow<List<AdminAuditAccessLog>> = _adminAuditLogs.asStateFlow()
 

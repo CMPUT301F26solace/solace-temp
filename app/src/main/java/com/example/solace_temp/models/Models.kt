@@ -259,6 +259,41 @@ data class BroadcastNotification(
     val sentAtMillis: Long = System.currentTimeMillis()
 )
 
+/** Enum defining the category/type of platform notification. */
+enum class NotificationType {
+    LOTTERY_DRAW, OWNER_BROADCAST, SYSTEM_UPDATE, RESERVATION_ALERT
+}
+
+/** Enum defining the delivery status of a notification dispatch. */
+enum class NotificationDeliveryStatus {
+    SENT, FAILED, PENDING
+}
+
+/** Enum defining the delivery channel used for a notification. */
+enum class NotificationChannel {
+    IN_APP, PUSH_NOTIFICATION, BOTH
+}
+
+/**
+ * Represents a system-wide notification log entry for administrative review.
+ */
+data class SystemNotificationLog(
+    val id: String = "",
+    val senderId: String = "",
+    val senderName: String = "",
+    val senderRole: UserRole = UserRole.ADMIN,
+    val recipientIds: List<String> = emptyList(),
+    val targetAudienceGroup: String = "Individual User",
+    val campsiteId: String = "",
+    val campsiteName: String = "",
+    val title: String = "",
+    val messageBody: String = "",
+    val type: NotificationType = NotificationType.SYSTEM_UPDATE,
+    val deliveryStatus: NotificationDeliveryStatus = NotificationDeliveryStatus.SENT,
+    val channel: NotificationChannel = NotificationChannel.IN_APP,
+    val timestampMillis: Long = System.currentTimeMillis()
+)
+
 /**
  * Enum defining the delivery status of a direct message between owner and entrant.
  */
