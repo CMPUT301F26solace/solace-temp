@@ -110,8 +110,8 @@ class OwnerLotteriesScreenTest {
             )
         }
 
-        // Verify LOTTERY HQ header and KPI labels
-        composeTestRule.onNodeWithText("LOTTERY HQ").assertIsDisplayed()
+        // Verify Manage Lotteries header and KPI labels
+        composeTestRule.onNodeWithText("Manage Lotteries").assertIsDisplayed()
         composeTestRule.onNodeWithText("Active Now").assertIsDisplayed()
         composeTestRule.onNodeWithText("In Booking").assertIsDisplayed()
         composeTestRule.onNodeWithText("Waitlist").assertIsDisplayed()

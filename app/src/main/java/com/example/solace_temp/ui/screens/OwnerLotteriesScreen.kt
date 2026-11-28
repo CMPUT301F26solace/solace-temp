@@ -39,7 +39,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -203,12 +202,6 @@ fun OwnerLotteriesScreen(
         item(key = "lottery_header", contentType = "header") {
             Column(verticalArrangement = Arrangement.spacedBy(SolaceTokens.SpaceXS)) {
                 Text(
-                    text = "LOTTERY HQ",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SolaceRed
-                )
-                Text(
                     text = "Manage Lotteries",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
@@ -243,16 +236,15 @@ fun OwnerLotteriesScreen(
                         Spacer(Modifier.width(SolaceTokens.SpaceSM))
                         Text("Calendar", style = MaterialTheme.typography.labelLarge)
                     }
-                    OutlinedButton(
+                    Button(
                         onClick = onOpenReservations,
                         modifier = Modifier
                             .weight(1f)
                             .testTag("btn_lottery_reservations"),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = CardSurface,
-                            contentColor = Neutral900
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SolaceRed,
+                            contentColor = Color.White
                         ),
-                        border = solaceCardBorder(),
                         shape = RoundedCornerShape(SolaceTokens.RadiusMD)
                     ) {
                         Icon(

@@ -39,8 +39,8 @@ val Neutral800 = Color(0xFF2B2E45)
 val Neutral900 = Color(0xFF1A1D2E)
 
 // ─── Surface tokens ───────────────────────────────────────────────────────────
-/** Cool soft lavender-grey background canvas for Owner screens (#EBEBF2). */
-val OwnerBackground = Color(0xFFEBEBF2)
+/** Soft lavender background canvas for Owner screens (#EDE8F8, matching Profile). */
+val OwnerBackground = Color(0xFFEDE8F8)
 
 /** Pure white elevated card surface (#FFFFFF). */
 val CardSurface = Color(0xFFFFFFFF)
