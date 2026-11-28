@@ -144,4 +144,76 @@ class OwnerCampsitesScreenTest {
         composeTestRule.onNodeWithText("My Awesome Campsite").performClick()
         assert(selectedCampsiteId == "camp-mine")
     }
+
+    @Test
+    fun ownerCampsites_kpisSearchAndFilterChips_filterRegisteredFeed() {
+        val fakeRepo = FakeListAppRepository()
+        fakeRepo._currentProfile.value = Profile(
+            deviceId = "owner-valid",
+            role = UserRole.CAMPSITE_OWNER
+        )
+
+        val now = System.currentTimeMillis()
+        val siteWithLottery = Campsite(
+            id = "camp-1",
+            ownerId = "owner-valid",
+            name = "Alpine Ridge",
+            location = Geolocation(locationName = "Banff"),
+            maxOccupancy = 6,
+            pricePerNight = 75.0
+        )
+        val siteNoLottery = Campsite(
+            id = "camp-2",
+            ownerId = "owner-valid",
+            name = "Cedar Creek",
+            location = Geolocation(locationName = "Jasper"),
+            maxOccupancy = 4,
+            pricePerNight = 55.0
+        )
+        val activeLot = Lottery(
+            id = "lot-1",
+            name = "Summer Draw",
+            campsiteIds = listOf("camp-1"),
+            ownerId = "owner-valid",
+            registrationStartMillis = now - 60_000L,
+            registrationEndMillis = now + 60_000L,
+            bookingStartMillis = now + 120_000L,
+            bookingEndMillis = now + 240_000L
+        )
+
+        val lotteriesFlow = MutableStateFlow(listOf(activeLot))
+        val repoWithLotteries = object : AppRepository by fakeRepo {
+            override val lotteries: StateFlow<List<Lottery>> = lotteriesFlow
+        }
+        fakeRepo._campsites.value = listOf(siteWithLottery, siteNoLottery)
+
+        composeTestRule.setContent {
+            OwnerCampsitesScreen(
+                repository = repoWithLotteries,
+                onSelectCampsite = {},
+                onCreateNew = {}
+            )
+        }
+
+        // Verify KPI summary labels
+        composeTestRule.onNodeWithText("Properties").assertIsDisplayed()
+        composeTestRule.onNodeWithText("In Lotteries").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Capacity").assertIsDisplayed()
+
+        // Filter to No Lottery
+        composeTestRule.onNodeWithText("No Lottery").performClick()
+        composeTestRule.onNodeWithText("Cedar Creek").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Alpine Ridge").assertDoesNotExist()
+
+        // Filter to Active Lottery
+        composeTestRule.onNodeWithText("Active Lottery").performClick()
+        composeTestRule.onNodeWithText("Alpine Ridge").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Cedar Creek").assertDoesNotExist()
+
+        // Reset to All and search
+        composeTestRule.onNodeWithText("All").performClick()
+        composeTestRule.onNodeWithTag("owner_campsites_search").performTextInput("Cedar")
+        composeTestRule.onNodeWithText("Cedar Creek").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Alpine Ridge").assertDoesNotExist()
+    }
 }

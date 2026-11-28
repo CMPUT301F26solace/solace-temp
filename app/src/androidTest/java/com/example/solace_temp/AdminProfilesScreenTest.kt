@@ -35,7 +35,7 @@ class AdminProfilesScreenTest {
 
         // 2. Inject it into a custom test repository just like the passing tests
         val testRepo = object : AppRepository {
-            override val currentProfile = MutableStateFlow(Profile(role = UserRole.ADMIN))
+            override val currentProfile = MutableStateFlow(Profile(role = UserRole.ADMIN, isAdmin = true))
             override val profiles = MutableStateFlow(listOf(testProfile))
 
             // Add the empty dummy flows so it compiles
@@ -89,7 +89,7 @@ class AdminProfilesScreenTest {
         val profile2 = Profile(name = "Bob", email = "bob@example.com")
 
         val testRepo = object : AppRepository {
-            override val currentProfile = MutableStateFlow(Profile(role = UserRole.ADMIN))
+            override val currentProfile = MutableStateFlow(Profile(role = UserRole.ADMIN, isAdmin = true))
             override val profiles = MutableStateFlow(listOf(profile1, profile2))
             override val campsites = MutableStateFlow(emptyList<Campsite>())
             override val lotteries = MutableStateFlow(emptyList<Lottery>())
@@ -137,11 +137,11 @@ class AdminProfilesScreenTest {
 
     @Test
     fun adminProfilesScreen_filtersByRole() {
-        val adminProfile = Profile(name = "Admin User", role = UserRole.ADMIN)
+        val adminProfile = Profile(name = "Admin User", role = UserRole.ADMIN, isAdmin = true)
         val ownerProfile = Profile(name = "Owner User", role = UserRole.CAMPSITE_OWNER)
 
         val testRepo = object : AppRepository {
-            override val currentProfile = MutableStateFlow(Profile(role = UserRole.ADMIN))
+            override val currentProfile = MutableStateFlow(Profile(role = UserRole.ADMIN, isAdmin = true))
             override val profiles = MutableStateFlow(listOf(adminProfile, ownerProfile))
             override val campsites = MutableStateFlow(emptyList<Campsite>())
             override val lotteries = MutableStateFlow(emptyList<Lottery>())

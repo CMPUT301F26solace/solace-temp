@@ -192,4 +192,92 @@ class CampsiteDetailsScreenTest {
         // Verify repository state updated
         assertEquals("Updated Campsite Name", fakeRepo._campsites.value.first().name)
     }
+
+    @Test
+    fun ownerQrAccessPass_revealInstantlyButtonRevealsPass() {
+        val fakeRepo = FakeAppRepository()
+        fakeRepo._currentProfile.value = Profile(
+            deviceId = "owner-123",
+            role = UserRole.CAMPSITE_OWNER,
+            isAdmin = false
+        )
+        val campsite = Campsite(
+            id = "camp-qr-reveal",
+            ownerId = "owner-123",
+            name = "Reveal Pass Camp",
+            qrCodePayload = "solace://campsite/camp-qr-reveal"
+        )
+        fakeRepo._campsites.value = listOf(campsite)
+
+        composeTestRule.setContent {
+            CampsiteDetailsScreen(
+                campsiteId = "camp-qr-reveal",
+                repository = fakeRepo,
+                onBack = {}
+            )
+        }
+
+        composeTestRule.onNodeWithText("Scratch to Reveal").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_reveal_qr_instantly").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Revealed").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun ownerEditsCampsite_updatesGpsPricingOccupancyAndPolicy() {
+        val fakeRepo = FakeAppRepository()
+        fakeRepo._currentProfile.value = Profile(
+            deviceId = "owner-123",
+            role = UserRole.CAMPSITE_OWNER,
+            isAdmin = false
+        )
+        val campsite = Campsite(
+            id = "camp-2",
+            ownerId = "owner-123",
+            name = "Pine Grove",
+            description = "Original pine description",
+            location = Geolocation(51.1784, -115.5708, "Banff"),
+            maxOccupancy = 4,
+            pricePerNight = 50.0,
+            rulesAndPolicy = "Original rules"
+        )
+        fakeRepo._campsites.value = listOf(campsite)
+
+        composeTestRule.setContent {
+            CampsiteDetailsScreen(
+                campsiteId = "camp-2",
+                repository = fakeRepo,
+                onBack = {}
+            )
+        }
+
+        composeTestRule.onNodeWithContentDescription("Edit Details").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("CAMPSITE SETTINGS").assertIsDisplayed()
+
+        // Update GPS coordinates
+        composeTestRule.onNodeWithText("Latitude").performScrollTo().performTextClearance()
+        composeTestRule.onNodeWithText("Latitude").performTextInput("52.8737")
+        composeTestRule.onNodeWithText("Longitude").performScrollTo().performTextClearance()
+        composeTestRule.onNodeWithText("Longitude").performTextInput("-118.0814")
+
+        // Update pricing and occupancy
+        composeTestRule.onNodeWithText("Price per Night ($) (Required)").performScrollTo().performTextClearance()
+        composeTestRule.onNodeWithText("Price per Night ($) (Required)").performTextInput("85")
+        composeTestRule.onNodeWithText("Maximum Occupancy (Required)").performScrollTo().performTextClearance()
+        composeTestRule.onNodeWithText("Maximum Occupancy (Required)").performTextInput("8")
+
+        // Update rules & policy
+        composeTestRule.onNodeWithText("Rules & Cancellation Policy (Optional)").performScrollTo().performTextClearance()
+        composeTestRule.onNodeWithText("Rules & Cancellation Policy (Optional)").performTextInput("No campfires after 10 PM.")
+
+        composeTestRule.onNodeWithText("Save Changes").performClick()
+        composeTestRule.onNodeWithText("Campsite Updated").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Done").performClick()
+
+        val updated = fakeRepo._campsites.value.first()
+        assertEquals(52.8737, updated.location.latitude, 0.0001)
+        assertEquals(-118.0814, updated.location.longitude, 0.0001)
+        assertEquals(85.0, updated.pricePerNight, 0.01)
+        assertEquals(8, updated.maxOccupancy)
+        assertEquals("No campfires after 10 PM.", updated.rulesAndPolicy)
+    }
 }

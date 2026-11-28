@@ -11,21 +11,18 @@ package com.example.solace_temp
 
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -34,12 +31,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -47,10 +41,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.solace_temp.data.FirestoreAppRepository
+import com.example.solace_temp.ui.components.LocalReduceMotion
 import com.example.solace_temp.ui.navigation.BottomNavItem
+import com.example.solace_temp.ui.navigation.SolaceFloatingBottomBar
 import com.example.solace_temp.ui.navigation.getBottomNavItemsForRole
 import com.example.solace_temp.ui.screens.*
 import com.example.solace_temp.ui.screens.AdminProfileDetailsScreen
+import com.example.solace_temp.ui.theme.OwnerBackground
 import com.example.solace_temp.ui.theme.Solace_tempTheme
 import kotlinx.coroutines.delay
 import com.example.solace_temp.ui.screens.EntrantNotificationsScreen
@@ -158,93 +155,53 @@ fun SolaceCampsiteApp() {
         }
     }
 
-    Scaffold(
-        bottomBar = {
-            Surface(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                shape = RoundedCornerShape(24.dp),
-                shadowElevation = 8.dp,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
-            ) {
-                NavigationBar(
-                    containerColor = Color.Transparent,
-                    tonalElevation = 0.dp,
-                    windowInsets = WindowInsets(0, 0, 0, 0)
-                ) {
-                    val navBackStackEntry by navController.currentBackStackEntryAsState()
-                    val currentRoute = navBackStackEntry?.destination?.route
+    val reduceMotion = remember(context) {
+        runCatching {
+            Settings.Global.getFloat(
+                context.contentResolver,
+                Settings.Global.ANIMATOR_DURATION_SCALE,
+                1f
+            ) == 0f
+        }.getOrDefault(false)
+    }
 
-                    navItems.forEach { item ->
-                        val selected = currentRoute == item.route
-                        
-                        // Icon scale animation
-                        val scale by animateFloatAsState(
-                            targetValue = if (selected) 1.2f else 1.0f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessLow
-                            ),
-                            label = "scale_anim"
-                        )
+    CompositionLocalProvider(LocalReduceMotion provides reduceMotion) {
+        Scaffold(
+            containerColor = OwnerBackground,
+            bottomBar = {
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route
 
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { 
-                                if (item == BottomNavItem.EntrantNotifications && unseenCount > 0) {
-                                    BadgedBox(
-                                        badge = {
-                                            Badge {
-                                                Text(
-                                                    text = if (unseenCount > 99) "99+" else unseenCount.toString()
-                                                )
-                                            }
-                                        }
-                                    ) {
-                                        Icon(
-                                            item.icon, 
-                                            contentDescription = item.label,
-                                            modifier = Modifier.scale(scale)
-                                        ) 
-                                    }
-                                } else {
-                                    Icon(
-                                        item.icon, 
-                                        contentDescription = item.label,
-                                        modifier = Modifier.scale(scale)
-                                    ) 
-                                }
-                            },
-                            label = { 
-                                Text(
-                                    text = item.label,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                ) 
-                            },
-                            alwaysShowLabel = false,
-                            colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
+                val selectedNavItem = navItems.find { it.route == currentRoute }
+                    ?: when {
+                        currentRoute == "policy_and_guidelines" ->
+                            navItems.find { it == BottomNavItem.ProfileTab } ?: navItems.first()
+                        currentRoute?.startsWith("profile_details") == true ->
+                            navItems.find { it == BottomNavItem.AdminProfiles } ?: navItems.first()
+                        currentRoute?.startsWith("campsite_reservation") == true ->
+                            navItems.find { it == BottomNavItem.EntrantNotifications } ?: navItems.first()
+                        currentRoute?.startsWith("lottery") == true ||
+                            currentRoute?.startsWith("owner_waitlist") == true ->
+                            navItems.find { it == BottomNavItem.OwnerLottery } ?: navItems.first()
+                        else -> navItems.first()
                     }
-                }
+
+                SolaceFloatingBottomBar(
+                    navItems = navItems,
+                    selectedItem = selectedNavItem,
+                    unseenNotificationCount = unseenCount,
+                    onSelectItem = { item ->
+                        navController.navigate(item.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
             }
-        }
-    ) { innerPadding ->
+        ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize()) {
             NavHost(
                 navController = navController,
@@ -272,26 +229,10 @@ fun SolaceCampsiteApp() {
 
                 // Lottery Notifications & Invitations
                 composable(BottomNavItem.EntrantNotifications.route) {
-                    val scope = rememberCoroutineScope()
                     EntrantNotificationsScreen(
                         repository = repository,
                         onAcceptReservation = { campsiteId, _ ->
                             navController.navigate("campsite_details/$campsiteId")
-                        },
-                        onDeclineReservation = { notificationId, campsiteId ->
-                            scope.launch {
-                                repository.declineLotteryInvitation(notificationId, campsiteId)
-                            }
-                        }
-                    )
-                }
-
-                // Entrant Notifications Destination
-                composable(AppScreen.EntrantNotifications.route) {
-                    EntrantNotificationsScreen(
-                        repository = repository,
-                        onAcceptReservation = { campsiteId, notificationId ->
-                            navController.navigate(AppScreen.CampsiteReservation.createRoute(campsiteId, notificationId))
                         },
                         onDeclineReservation = { notificationId, campsiteId ->
                             scope.launch {
@@ -513,6 +454,7 @@ fun SolaceCampsiteApp() {
                     )
                 }
             }
+        }
         }
     }
 }

@@ -136,6 +136,7 @@ class DeviceIdentificationTest {
         assertEquals(deviceId, profile.deviceId)
         assertEquals("New Explorer", profile.name)
         assertEquals(UserRole.ENTRANT, profile.role)
+        assertFalse(profile.isAdmin)
     }
 
     @Test

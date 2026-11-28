@@ -29,6 +29,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.solace_temp.data.AppRepository
+import com.example.solace_temp.ui.theme.CardSurface
+import com.example.solace_temp.ui.theme.Neutral600
+import com.example.solace_temp.ui.theme.Neutral700
+import com.example.solace_temp.ui.theme.Neutral900
+import com.example.solace_temp.ui.theme.OwnerBackground
+import com.example.solace_temp.ui.theme.SolaceCardShape
+import com.example.solace_temp.ui.theme.SolaceRed
+import com.example.solace_temp.ui.theme.solaceCardBorder
+import com.example.solace_temp.ui.theme.solaceCardColors
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -54,53 +63,101 @@ fun OwnerCalendarScreen(repository: AppRepository, onBack: () -> Unit) {
     val daysInMonth = month.getActualMaximum(Calendar.DAY_OF_MONTH)
     val booked = campsite?.let { campsiteBookingsByDay(it.id, reservations) }.orEmpty()
 
-    Scaffold(topBar = {
-        TopAppBar(
-            title = { Text("Booked Dates") },
-            navigationIcon = {
-                TextButton(
-                    onClick = onBack,
-                    modifier = Modifier.testTag("owner_calendar_back")
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    Spacer(Modifier.width(4.dp))
-                    Text("Back")
-                }
-            }
-        )
-    }) { padding ->
+    Scaffold(
+        containerColor = OwnerBackground,
+        topBar = {
+            TopAppBar(
+                title = { Text("Booked Dates", color = Neutral900) },
+                navigationIcon = {
+                    TextButton(
+                        onClick = onBack,
+                        colors = ButtonDefaults.textButtonColors(contentColor = Neutral900),
+                        modifier = Modifier.testTag("owner_calendar_back")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Spacer(Modifier.width(4.dp))
+                        Text("Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = OwnerBackground,
+                    titleContentColor = Neutral900,
+                    navigationIconContentColor = Neutral900
+                )
+            )
+        }
+    ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
-                .padding(16.dp).testTag("owner_calendar"),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(OwnerBackground)
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+                .testTag("owner_calendar"),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (campsite == null) {
-                Text("You haven't registered any campsites yet.")
+                Text(
+                    "You haven't registered any campsites yet.",
+                    color = Neutral700
+                )
             } else {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(ownedSites, key = { it.id }) { site ->
                         if (site.id == campsite.id) {
-                            Button(onClick = { selectedCampsiteId = site.id; selectedDate = null }) {
+                            Button(
+                                onClick = { selectedCampsiteId = site.id; selectedDate = null },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SolaceRed,
+                                    contentColor = Color.White
+                                )
+                            ) {
                                 Text(site.name)
                             }
                         } else {
-                            OutlinedButton(onClick = { selectedCampsiteId = site.id; selectedDate = null }) {
+                            OutlinedButton(
+                                onClick = { selectedCampsiteId = site.id; selectedDate = null },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = CardSurface,
+                                    contentColor = Neutral900
+                                ),
+                                border = solaceCardBorder()
+                            ) {
                                 Text(site.name)
                             }
                         }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(onClick = { monthOffset--; selectedDate = null }) { Text("Previous") }
-                    Text(monthTitle, style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold)
-                    TextButton(onClick = { monthOffset++; selectedDate = null }) { Text("Next") }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    TextButton(
+                        onClick = { monthOffset--; selectedDate = null },
+                        colors = ButtonDefaults.textButtonColors(contentColor = SolaceRed)
+                    ) { Text("Previous") }
+                    Text(
+                        monthTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Neutral900
+                    )
+                    TextButton(
+                        onClick = { monthOffset++; selectedDate = null },
+                        colors = ButtonDefaults.textButtonColors(contentColor = SolaceRed)
+                    ) { Text("Next") }
                 }
                 Row(modifier = Modifier.fillMaxWidth()) {
                     listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat").forEach { day ->
-                        Text(day, modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            day,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Neutral600
+                        )
                     }
                 }
                 val cells = (0 until startOffset).map { null } +
@@ -132,18 +189,31 @@ fun OwnerCalendarScreen(repository: AppRepository, onBack: () -> Unit) {
                         }
                     }
                 }
-                Text("Booked (pink) · Blocked (gray) · Available (green)",
-                    style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "Booked (pink) · Blocked (gray) · Available (green)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Neutral600
+                )
                 selectedDate?.let { date ->
                     val status = calendarDayStatus(campsite, date, booked)
-                    Card(modifier = Modifier.fillMaxWidth().testTag("calendar_day_details")) {
-                        Column(modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(date, fontWeight = FontWeight.Bold)
-                            Text(status.name.lowercase().replaceFirstChar { it.uppercase() })
+                    Card(
+                        shape = SolaceCardShape,
+                        colors = solaceCardColors(),
+                        border = solaceCardBorder(),
+                        modifier = Modifier.fillMaxWidth().testTag("calendar_day_details")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(date, fontWeight = FontWeight.Bold, color = Neutral900)
+                            Text(
+                                status.name.lowercase().replaceFirstChar { it.uppercase() },
+                                color = Neutral700
+                            )
                             booked[date].orEmpty().forEach { booking ->
-                                Text("Entrant ID: ${booking.entrantId}")
-                                Text("Reservation ID: ${booking.id}")
+                                Text("Entrant ID: ${booking.entrantId}", color = Neutral700)
+                                Text("Reservation ID: ${booking.id}", color = Neutral700)
                             }
                         }
                     }
